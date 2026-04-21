@@ -1,0 +1,29 @@
+[project]
+name = "mindbranches"
+version = "0.1.0"
+description = "Generate MindBranches-style horizontal mind-map diagrams from prose."
+requires-python = ">=3.11"
+dependencies = [
+    "google-genai>=1.0.0",
+    "jinja2>=3.1.0",
+    "playwright>=1.40.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "sse-starlette>=2.0.0",
+    "pydantic>=2.0.0",
+]
+
+[project.scripts]
+mindbranches = "mindbranches.cli:main"
+mindbranches-portal = "mindbranches.server:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mindbranches = ["fonts/*.ttf", "templates/*.j2", "static/*"]

@@ -1,0 +1,9 @@
+How LLMs learn to be useful.
+
+Pretraining is the first phase. The model is fed enormous corpora of web text, books, code, and conversations. Its only job is to predict the next token. This is brute-force statistical learning: nothing about the data tells the model what is "good" -- it learns the surface texture of human writing. After pretraining, the model can complete sentences fluently but does not yet follow instructions, refuse harm, or stay on task.
+
+Fine-tuning narrows the model's behavior. Engineers collect curated examples of desired conversations -- often thousands or millions of them -- and run supervised training on those. The model learns to mimic the tone, format, and structure of the examples. This is where it starts to feel like a chatbot rather than an autocomplete.
+
+Reinforcement learning from human feedback (RLHF) is the third major phase. Humans rank multiple model responses to the same prompt; a reward model is trained to predict those rankings; the language model is then optimized to maximize the reward. RLHF is what makes the model helpful, honest, and harmless in practice. It also introduces failure modes -- sycophancy, mode collapse, and over-refusal -- that researchers continue to debug.
+
+Inference is what the user sees. The model's weights are frozen, and at runtime tokens are sampled one at a time from the model's predicted distribution. Sampling temperature, top-p, and other decoding parameters control creativity and randomness. The system prompt steers behavior. Tool use, retrieval, and multi-step agents all sit on top of inference -- the underlying model never changes during a conversation.

@@ -1,0 +1,43 @@
+{
+  "root": "LLM Learning Process",
+  "branches": [
+    {
+      "label": "Pretraining",
+      "children": [
+        "Fed enormous data corpora",
+        "Predicts next token statistically",
+        "Learns surface text patterns",
+        "Fluent, but lacks instruction-following"
+      ]
+    },
+    {
+      "label": "Fine-tuning",
+      "children": [
+        "Uses curated conversation examples",
+        "Employs supervised training",
+        "Mimics desired tone and format",
+        "Becomes chatbot-like"
+      ]
+    },
+    {
+      "label": "Reinforcement Learning (RLHF)",
+      "children": [
+        "Humans rank model responses",
+        "Reward model predicts rankings",
+        "LLM optimizes for reward",
+        "Achieves helpful, honest, harmless",
+        "Introduces failure modes"
+      ]
+    },
+    {
+      "label": "Inference",
+      "children": [
+        "Model weights are frozen",
+        "Tokens sampled one-by-one",
+        "Decoding parameters control output",
+        "System prompt steers behavior",
+        "Supports tools, retrieval, agents"
+      ]
+    }
+  ]
+}
