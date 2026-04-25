@@ -1,17 +1,30 @@
 const STEPS = {
   queued: "Queued",
   reading_file: "Reading file",
-  extracting_tree: "Calling Claude to extract tree",
+  extracting_tree: "Calling Gemini to extract tree",
   tree_ready: "Tree ready",
   computing_layout: "Computing layout",
   rendering_svg: "Rendering SVG",
   wrapping_html: "Wrapping HTML",
+  preview_ready: "Preview ready",
   screenshotting_png: "Screenshotting PNG",
   done: "Done",
   error: "Error",
 };
 
 const submitBtn = document.getElementById("submit");
+const filepathInput = document.getElementById("filepath");
+const fileInput = document.getElementById("file-input");
+const chooseBtn = document.getElementById("choose-file");
+const dropZone = document.getElementById("drop-zone");
+const fileHint = document.getElementById("file-hint");
+
+const previewSection = document.getElementById("preview");
+const previewFrame = document.getElementById("preview-frame");
+const previewIframe = document.getElementById("preview-iframe");
+const previewOverlay = document.getElementById("preview-overlay");
+const overlayLabel = previewOverlay.querySelector(".overlay-label");
+
 const statusSection = document.getElementById("status");
 const trail = document.getElementById("status-trail");
 const downloadsSection = document.getElementById("downloads");
@@ -19,14 +32,76 @@ const downloadRow = document.getElementById("download-row");
 const errorSection = document.getElementById("error");
 const errorMsg = document.getElementById("error-message");
 
+let pendingFile = null;
+
+// File picker / drag-drop wiring
+
+chooseBtn.addEventListener("click", () => fileInput.click());
+
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length) setPendingFile(fileInput.files[0]);
+});
+
+filepathInput.addEventListener("input", () => {
+  if (filepathInput.value && !filepathInput.value.startsWith("[file:")) {
+    clearPendingFile();
+  }
+});
+
+["dragenter", "dragover"].forEach((evt) => {
+  dropZone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.add("drag-hover");
+  });
+});
+
+["dragleave", "drop"].forEach((evt) => {
+  dropZone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove("drag-hover");
+  });
+});
+
+dropZone.addEventListener("drop", (e) => {
+  if (e.dataTransfer.files.length) setPendingFile(e.dataTransfer.files[0]);
+});
+
+// Block global page-level drops so dropping outside the zone doesn't navigate
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => e.preventDefault());
+
+function setPendingFile(file) {
+  pendingFile = file;
+  filepathInput.value = `[file: ${file.name}]`;
+  fileHint.hidden = false;
+  fileHint.textContent = `Holding "${file.name}" -- ${formatBytes(file.size)}. Will be uploaded to the server when you click Generate.`;
+}
+
+function clearPendingFile() {
+  pendingFile = null;
+  fileInput.value = "";
+  fileHint.hidden = true;
+}
+
+function formatBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(2)} MB`;
+}
+
+// Submit
+
 submitBtn.addEventListener("click", runJob);
-document.getElementById("filepath").addEventListener("keydown", (e) => {
+filepathInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") runJob();
 });
 
 async function runJob() {
-  const filepath = document.getElementById("filepath").value.trim();
-  if (!filepath) return;
+  const filepath = filepathInput.value.trim();
+  if (!pendingFile && !filepath) return;
+  if (!pendingFile && filepath.startsWith("[file:")) return;
 
   const theme = document.getElementById("theme").value;
   const model = document.getElementById("model").value;
@@ -38,11 +113,21 @@ async function runJob() {
 
   let resp;
   try {
-    resp = await fetch("/convert", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filepath, theme, model, width, root }),
-    });
+    if (pendingFile) {
+      const fd = new FormData();
+      fd.append("file", pendingFile);
+      fd.append("theme", theme);
+      fd.append("model", model);
+      fd.append("width", width);
+      if (root) fd.append("root", root);
+      resp = await fetch("/upload", { method: "POST", body: fd });
+    } else {
+      resp = await fetch("/convert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filepath, theme, model, width, root }),
+      });
+    }
   } catch (err) {
     showError(`Network error: ${err.message}`);
     return;
@@ -53,6 +138,8 @@ async function runJob() {
     return;
   }
   const { job_id } = await resp.json();
+
+  showPreviewSkeleton();
 
   const es = new EventSource(`/status/${job_id}`);
   Object.keys(STEPS).forEach((evt) => {
@@ -71,6 +158,16 @@ function resetUi() {
   downloadRow.innerHTML = "";
   errorSection.hidden = true;
   errorMsg.textContent = "";
+  previewSection.hidden = true;
+  previewIframe.removeAttribute("src");
+  previewOverlay.classList.remove("hidden");
+  overlayLabel.textContent = "Building diagram...";
+}
+
+function showPreviewSkeleton() {
+  previewSection.hidden = false;
+  previewOverlay.classList.remove("hidden");
+  overlayLabel.textContent = "Building diagram...";
 }
 
 function setSubmitting(on) {
@@ -92,15 +189,30 @@ function handleEvent(evt, e, jobId, es) {
 
   appendStep(evt, STEPS[evt] || evt, data);
 
+  if (evt === "extracting_tree") {
+    overlayLabel.textContent = "Calling Gemini...";
+  } else if (evt === "computing_layout") {
+    overlayLabel.textContent = "Computing layout...";
+  } else if (evt === "rendering_svg") {
+    overlayLabel.textContent = "Rendering SVG...";
+  } else if (evt === "preview_ready") {
+    previewIframe.src = `/preview/${jobId}/output.html`;
+    previewIframe.addEventListener("load", () => {
+      previewOverlay.classList.add("hidden");
+    }, { once: true });
+  } else if (evt === "screenshotting_png") {
+    overlayLabel.textContent = "Snapshotting PNG...";
+  }
+
   if (evt === "done") {
     populateDownloads(jobId, data.outputs || []);
+    previewOverlay.classList.add("hidden");
     es.close();
     setSubmitting(false);
   }
 }
 
 function appendStep(evtKey, label, data) {
-  // Mark the previous step as completed
   const last = trail.lastElementChild;
   if (last && !last.classList.contains("done")) {
     last.classList.add("completed");
@@ -140,12 +252,12 @@ function populateDownloads(jobId, files) {
   downloadsSection.hidden = false;
   downloadRow.innerHTML = "";
 
-  const preview = document.createElement("a");
-  preview.href = `/preview/${jobId}/output.html`;
-  preview.textContent = "preview in browser";
-  preview.classList.add("chip", "primary");
-  preview.target = "_blank";
-  downloadRow.appendChild(preview);
+  const open = document.createElement("a");
+  open.href = `/preview/${jobId}/output.html`;
+  open.textContent = "open in new tab";
+  open.classList.add("chip", "primary");
+  open.target = "_blank";
+  downloadRow.appendChild(open);
 
   files.forEach((name) => {
     const a = document.createElement("a");

@@ -15,8 +15,13 @@
 
   <section class="form">
     <div class="field">
-      <label for="filepath">Filepath</label>
-      <input type="text" id="filepath" placeholder="/absolute/path/to/notes.txt" autocomplete="off" autofocus>
+      <label for="filepath">File</label>
+      <div class="filepath-row" id="drop-zone">
+        <input type="text" id="filepath" placeholder="paste an absolute path, or drop a file here" autocomplete="off" autofocus>
+        <button type="button" class="btn-secondary" id="choose-file">Choose file</button>
+        <input type="file" id="file-input" accept=".txt,text/plain,*/*" hidden>
+      </div>
+      <p class="hint" id="file-hint" hidden></p>
     </div>
 
     <div class="row">
@@ -47,6 +52,17 @@
     </div>
 
     <button id="submit">Generate</button>
+  </section>
+
+  <section class="preview" id="preview" hidden>
+    <h2>Diagram</h2>
+    <div class="preview-frame" id="preview-frame">
+      <iframe id="preview-iframe" title="Diagram preview"></iframe>
+      <div class="preview-overlay" id="preview-overlay">
+        <span class="spinner"></span>
+        <span class="overlay-label">Building diagram...</span>
+      </div>
+    </div>
   </section>
 
   <section class="status" id="status" hidden>

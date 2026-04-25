@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -93,6 +93,9 @@ def _run_pipeline(job: Job, req: ConvertRequest) -> None:
         html = render_html(svg, bg=layout.bg)
         (job.out_dir / "output.html").write_text(html)
 
+        # File now exists on disk; frontend can embed it live before the PNG step.
+        _put_event(job, "preview_ready", {"bg": layout.bg})
+
         _put_event(job, "screenshotting_png", {"estimate_seconds": 2})
         render_png_via_playwright(
             job.out_dir / "output.html",
@@ -134,6 +137,38 @@ def create_app() -> FastAPI:
         loop = asyncio.get_running_loop()
         job = Job(job_id=job_id, out_dir=out_dir, loop=loop)
         JOBS[job_id] = job
+        threading.Thread(
+            target=_run_pipeline, args=(job, req), daemon=True
+        ).start()
+        return {"job_id": job_id}
+
+    @app.post("/upload")
+    async def upload(
+        file: UploadFile = File(...),
+        theme: str = Form("cream"),
+        model: str = Form("flash"),
+        root: str | None = Form(None),
+        width: int = Form(1600),
+    ) -> dict[str, str]:
+        job_id = uuid.uuid4().hex[:12]
+        out_dir = JOBS_ROOT / job_id
+        out_dir.mkdir(parents=True, exist_ok=True)
+        input_path = out_dir / "input.txt"
+        content = await file.read()
+        if len(content) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="File too large (>5 MB).")
+        input_path.write_bytes(content)
+
+        loop = asyncio.get_running_loop()
+        job = Job(job_id=job_id, out_dir=out_dir, loop=loop)
+        JOBS[job_id] = job
+        req = ConvertRequest(
+            filepath=str(input_path),
+            theme=theme,
+            model=model,
+            root=root,
+            width=width,
+        )
         threading.Thread(
             target=_run_pipeline, args=(job, req), daemon=True
         ).start()
