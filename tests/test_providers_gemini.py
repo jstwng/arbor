@@ -19,3 +19,15 @@ def test_get_plugin_unknown_raises():
     import pytest
     with pytest.raises(ValueError, match="Unknown provider"):
         get_plugin("does-not-exist")
+
+
+def test_all_providers_registered():
+    assert set(PROVIDERS.keys()) == {"gemini", "anthropic", "openai", "openai_compat"}
+
+
+def test_each_plugin_has_required_methods():
+    for cls in PROVIDERS.values():
+        inst = cls()
+        assert hasattr(inst, "extract")
+        assert hasattr(inst, "extract_stream")
+        assert hasattr(inst, "name")

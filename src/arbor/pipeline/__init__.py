@@ -108,7 +108,7 @@ def extract_tree_stream(
     model = get_model(config, model_id)
     provider = model["provider"]
     api_key = provider_api_key(config, provider)
-    plugin = get_plugin(provider)
+    plugin = get_plugin(provider, config=config)
 
     # Compaction phase: shrink long inputs before extraction
     compaction_events: list = []

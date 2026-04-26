@@ -23,7 +23,10 @@ LEGACY_CONFIG_PATH = LEGACY_CONFIG_DIR / "config.json"
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "providers": {
-        "gemini": {"api_key": ""},
+        "gemini":        {"api_key": ""},
+        "anthropic":     {"api_key": ""},
+        "openai":        {"api_key": ""},
+        "openai_compat": {"base_url": "http://localhost:11434/v1", "api_key": "ollama"},
     },
     "models": [
         {
@@ -46,6 +49,36 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "id": "gemini-2.0-flash",
             "label": "Gemini 2.0 Flash",
             "provider": "gemini",
+        },
+        {
+            "id": "claude-haiku-4-5",
+            "label": "Claude Haiku 4.5",
+            "provider": "anthropic",
+        },
+        {
+            "id": "claude-sonnet-4-6",
+            "label": "Claude Sonnet 4.6",
+            "provider": "anthropic",
+        },
+        {
+            "id": "claude-opus-4-7",
+            "label": "Claude Opus 4.7",
+            "provider": "anthropic",
+        },
+        {
+            "id": "gpt-5",
+            "label": "GPT-5",
+            "provider": "openai",
+        },
+        {
+            "id": "gpt-5-mini",
+            "label": "GPT-5 Mini",
+            "provider": "openai",
+        },
+        {
+            "id": "llama3.1:8b",
+            "label": "Llama 3.1 8B (local)",
+            "provider": "openai_compat",
         },
     ],
     "themes": [
