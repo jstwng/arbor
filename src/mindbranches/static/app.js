@@ -1,3 +1,122 @@
+// ---------- Custom dropdown ----------
+//
+// Replaces native <select> so the OPEN menu is fully styleable. Returns a
+// container element with .getValue() / .setValue() / .setOptions() handles.
+
+function createDropdown({ options, value, onChange, size = "normal", placeholder = "" }) {
+  const root = document.createElement("div");
+  root.className = "dropdown" + (size === "compact" ? " dropdown-compact" : "");
+  root.dataset.open = "false";
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "dropdown-trigger";
+  trigger.setAttribute("aria-haspopup", "listbox");
+  trigger.setAttribute("aria-expanded", "false");
+
+  const valueSpan = document.createElement("span");
+  valueSpan.className = "dropdown-value";
+  trigger.appendChild(valueSpan);
+
+  const panel = document.createElement("ul");
+  panel.className = "dropdown-panel";
+  panel.setAttribute("role", "listbox");
+
+  let currentOptions = options.slice();
+  let currentValue = value;
+
+  function render() {
+    const sel = currentOptions.find((o) => o.value === currentValue);
+    valueSpan.textContent = sel ? sel.label : (placeholder || "");
+    valueSpan.style.color = sel ? "" : "var(--muted)";
+    panel.innerHTML = "";
+    currentOptions.forEach((opt) => {
+      const li = document.createElement("li");
+      li.className = "dropdown-option";
+      li.setAttribute("role", "option");
+      li.dataset.value = opt.value;
+      li.setAttribute("aria-selected", String(opt.value === currentValue));
+      li.textContent = opt.label;
+      li.addEventListener("mousedown", (e) => {
+        // mousedown so we beat the document-level click-outside listener
+        e.preventDefault();
+        e.stopPropagation();
+        setValue(opt.value);
+        close();
+      });
+      panel.appendChild(li);
+    });
+  }
+
+  function setValue(v) {
+    currentValue = v;
+    render();
+    if (onChange) onChange(v);
+  }
+
+  function open() {
+    closeAllDropdowns();
+    root.dataset.open = "true";
+    trigger.setAttribute("aria-expanded", "true");
+  }
+  function close() {
+    root.dataset.open = "false";
+    trigger.setAttribute("aria-expanded", "false");
+  }
+  function toggle() {
+    if (root.dataset.open === "true") close();
+    else open();
+  }
+
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggle();
+  });
+
+  trigger.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
+      e.preventDefault();
+      open();
+      const sel = panel.querySelector('[aria-selected="true"]') || panel.querySelector(".dropdown-option");
+      if (sel) sel.focus();
+    } else if (e.key === "Escape") {
+      close();
+    }
+  });
+
+  root.appendChild(trigger);
+  root.appendChild(panel);
+  render();
+
+  root.getValue = () => currentValue;
+  root.setValue = setValue;
+  root.setOptions = (opts, keepValue = true) => {
+    currentOptions = opts.slice();
+    if (!keepValue || !currentOptions.find((o) => o.value === currentValue)) {
+      const def = currentOptions.find((o) => o.default) || currentOptions[0];
+      currentValue = def ? def.value : null;
+    }
+    render();
+  };
+
+  return root;
+}
+
+document.addEventListener("click", () => closeAllDropdowns());
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeAllDropdowns();
+});
+
+function closeAllDropdowns() {
+  document.querySelectorAll('.dropdown[data-open="true"]').forEach((d) => {
+    d.dataset.open = "false";
+    const t = d.querySelector(".dropdown-trigger");
+    if (t) t.setAttribute("aria-expanded", "false");
+  });
+}
+
+// ---------- App state ----------
+
 const STEP_LABELS = {
   queued: "Queued",
   reading_file: "Reading file",
@@ -12,17 +131,12 @@ const STEP_LABELS = {
   error: "Error",
 };
 
-// ---------- Element refs ----------
-
 const submitBtn = document.getElementById("submit");
 const filepathInput = document.getElementById("filepath");
 const fileInput = document.getElementById("file-input");
 const chooseBtn = document.getElementById("choose-file");
 const dropZone = document.getElementById("drop-zone");
 const fileHint = document.getElementById("file-hint");
-
-const themeSel = document.getElementById("theme");
-const modelSel = document.getElementById("model");
 const widthInput = document.getElementById("width");
 
 const previewSection = document.getElementById("preview");
@@ -48,11 +162,14 @@ const modelTableBody = document.querySelector("#model-table tbody");
 const addModelBtn = document.getElementById("add-model");
 const defaultWidthInput = document.getElementById("default-width");
 
-// ---------- State ----------
+const themeHost = document.getElementById("theme-host");
+const modelHost = document.getElementById("model-host");
 
 let pendingFile = null;
 let configCache = null;
-let draftConfig = null; // edited copy while modal is open
+let draftConfig = null;
+let themeDropdown = null;
+let modelDropdown = null;
 
 // ---------- Bootstrap ----------
 
@@ -60,15 +177,13 @@ bootstrap();
 
 async function bootstrap() {
   await refreshConfig();
-  if (!hasAnyKey(configCache)) {
-    openSettings();
-  }
+  if (!hasAnyKey(configCache)) openSettings();
 }
 
 async function refreshConfig() {
   const res = await fetch("/config");
   configCache = await res.json();
-  populateDropdowns(configCache);
+  populateMainDropdowns(configCache);
 }
 
 function hasAnyKey(config) {
@@ -77,26 +192,35 @@ function hasAnyKey(config) {
   return Object.values(providers).some((p) => p && p.has_key);
 }
 
-function populateDropdowns(config) {
-  // Themes
-  themeSel.innerHTML = "";
-  for (const t of config.themes || []) {
-    const opt = document.createElement("option");
-    opt.value = t.id;
-    opt.textContent = t.label || t.id;
-    if (t.default) opt.selected = true;
-    themeSel.appendChild(opt);
+function populateMainDropdowns(config) {
+  const themes = (config.themes || []).map((t) => ({
+    value: t.id,
+    label: t.label || t.id,
+    default: !!t.default,
+  }));
+  const models = (config.models || []).map((m) => ({
+    value: m.id,
+    label: m.label || m.id,
+    default: !!m.default,
+  }));
+
+  const themeDefault = (themes.find((t) => t.default) || themes[0] || {}).value;
+  const modelDefault = (models.find((m) => m.default) || models[0] || {}).value;
+
+  if (!themeDropdown) {
+    themeDropdown = createDropdown({ options: themes, value: themeDefault });
+    themeHost.appendChild(themeDropdown);
+  } else {
+    themeDropdown.setOptions(themes);
   }
-  // Models
-  modelSel.innerHTML = "";
-  for (const m of config.models || []) {
-    const opt = document.createElement("option");
-    opt.value = m.id;
-    opt.textContent = m.label || m.id;
-    if (m.default) opt.selected = true;
-    modelSel.appendChild(opt);
+
+  if (!modelDropdown) {
+    modelDropdown = createDropdown({ options: models, value: modelDefault });
+    modelHost.appendChild(modelDropdown);
+  } else {
+    modelDropdown.setOptions(models);
   }
-  // Width default
+
   const defaultWidth = (config.defaults && config.defaults.width) || 1600;
   if (!widthInput.value) widthInput.value = defaultWidth;
 }
@@ -110,9 +234,7 @@ fileInput.addEventListener("change", () => {
 });
 
 filepathInput.addEventListener("input", () => {
-  if (filepathInput.value && !filepathInput.value.startsWith("[file:")) {
-    clearPendingFile();
-  }
+  if (filepathInput.value && !filepathInput.value.startsWith("[file:")) clearPendingFile();
 });
 
 ["dragenter", "dragover"].forEach((evt) => {
@@ -169,8 +291,8 @@ async function runJob() {
   if (!pendingFile && !filepath) return;
   if (!pendingFile && filepath.startsWith("[file:")) return;
 
-  const theme = themeSel.value;
-  const model = modelSel.value;
+  const theme = themeDropdown ? themeDropdown.getValue() : null;
+  const model = modelDropdown ? modelDropdown.getValue() : null;
   const width = parseInt(widthInput.value, 10);
   const root = document.getElementById("root").value.trim() || null;
 
@@ -182,8 +304,8 @@ async function runJob() {
     if (pendingFile) {
       const fd = new FormData();
       fd.append("file", pendingFile);
-      fd.append("theme", theme);
-      fd.append("model", model);
+      if (theme) fd.append("theme", theme);
+      if (model) fd.append("model", model);
       fd.append("width", width);
       if (root) fd.append("root", root);
       resp = await fetch("/upload", { method: "POST", body: fd });
@@ -349,7 +471,6 @@ addModelBtn.addEventListener("click", () => {
     label: "",
     provider: defaultProviderName(draftConfig),
     default: false,
-    api_key_value: "",
   });
   renderSettings();
 });
@@ -360,8 +481,6 @@ document.addEventListener("keydown", (e) => {
 
 function openSettings() {
   draftConfig = JSON.parse(JSON.stringify(configCache));
-  // Add an api_key_value field per provider for editing — initially blank since
-  // we never sent the real key down. Empty string on save means "leave alone".
   for (const name of Object.keys(draftConfig.providers || {})) {
     draftConfig.providers[name].api_key_value = "";
   }
@@ -380,9 +499,7 @@ function renderSettings() {
   const knownProviders = ["gemini", "anthropic", "openai"];
   const providers = draftConfig.providers || (draftConfig.providers = {});
   for (const name of knownProviders) {
-    if (!providers[name]) {
-      providers[name] = { has_key: false, api_key_value: "" };
-    }
+    if (!providers[name]) providers[name] = { has_key: false, api_key_value: "" };
   }
   for (const [name, provider] of Object.entries(providers)) {
     const row = document.createElement("div");
@@ -396,10 +513,7 @@ function renderSettings() {
     input.type = "password";
     input.placeholder = provider.has_key ? "(saved -- leave blank to keep)" : "paste your API key";
     input.value = provider.api_key_value || "";
-    input.dataset.provider = name;
-    input.addEventListener("input", () => {
-      provider.api_key_value = input.value;
-    });
+    input.addEventListener("input", () => { provider.api_key_value = input.value; });
     row.appendChild(input);
 
     providerRows.appendChild(row);
@@ -408,6 +522,8 @@ function renderSettings() {
   // Models
   modelTableBody.innerHTML = "";
   const models = draftConfig.models || (draftConfig.models = []);
+  const providerOptions = Object.keys(draftConfig.providers || {}).map((n) => ({ value: n, label: n }));
+
   models.forEach((m, idx) => {
     const tr = document.createElement("tr");
 
@@ -430,16 +546,13 @@ function renderSettings() {
     tr.appendChild(tdId);
 
     const tdProvider = document.createElement("td");
-    const provSel = document.createElement("select");
-    for (const name of Object.keys(draftConfig.providers || {})) {
-      const o = document.createElement("option");
-      o.value = name;
-      o.textContent = name;
-      if (m.provider === name) o.selected = true;
-      provSel.appendChild(o);
-    }
-    provSel.addEventListener("change", () => { m.provider = provSel.value; });
-    tdProvider.appendChild(provSel);
+    const provDropdown = createDropdown({
+      options: providerOptions,
+      value: m.provider || (providerOptions[0] && providerOptions[0].value),
+      onChange: (v) => { m.provider = v; },
+      size: "compact",
+    });
+    tdProvider.appendChild(provDropdown);
     tr.appendChild(tdProvider);
 
     const tdDefault = document.createElement("td");
@@ -447,7 +560,6 @@ function renderSettings() {
     defaultInput.type = "checkbox";
     defaultInput.checked = !!m.default;
     defaultInput.addEventListener("change", () => {
-      // exclusive default
       models.forEach((o) => { o.default = false; });
       m.default = defaultInput.checked;
       renderSettings();
@@ -481,9 +593,7 @@ function defaultProviderName(config) {
   return provs[0] || "gemini";
 }
 
-function capitalize(s) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 async function saveSettings() {
   const payload = {
@@ -501,8 +611,6 @@ async function saveSettings() {
   };
   for (const [name, provider] of Object.entries(draftConfig.providers || {})) {
     const value = (provider.api_key_value || "").trim();
-    // Empty string when the provider already had a saved key means "keep it".
-    // Empty string when there's no saved key sends an empty (and stays empty).
     if (value || !provider.has_key) {
       payload.providers[name] = { api_key: value };
     }
@@ -516,11 +624,10 @@ async function saveSettings() {
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
-      const text = await res.text();
-      alert(`Save failed: HTTP ${res.status}\n${text}`);
+      alert(`Save failed: HTTP ${res.status}\n${await res.text()}`);
     } else {
       configCache = await res.json();
-      populateDropdowns(configCache);
+      populateMainDropdowns(configCache);
       closeSettings();
     }
   } catch (err) {
