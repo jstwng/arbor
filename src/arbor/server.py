@@ -29,6 +29,9 @@ from .layout import compute_layout, layout_to_snapshot
 from .pipeline import extract_tree_stream
 from .pipeline.events import (
     BranchPartial,
+    ChunkSummarized,
+    CompactionFinished,
+    CompactionStarted,
     ExtractionStarted,
     TreeComplete,
     ValidationRetry,
@@ -135,7 +138,16 @@ def _run_pipeline(job: Job, req: ConvertRequest) -> None:
             config=APP_CONFIG,
             layers=layers,
         ):
-            if isinstance(evt, ExtractionStarted):
+            if isinstance(evt, CompactionStarted):
+                _put_event(job, "compaction_started",
+                           {"strategy": evt.strategy, "chunk_count": evt.chunk_count})
+            elif isinstance(evt, ChunkSummarized):
+                _put_event(job, "chunk_summarized",
+                           {"index": evt.index, "total": evt.total})
+            elif isinstance(evt, CompactionFinished):
+                _put_event(job, "compaction_finished",
+                           {"compact_prose_chars": evt.compact_prose_chars})
+            elif isinstance(evt, ExtractionStarted):
                 skel_w = width
                 skel_h = max(800, int(width * 0.6))
                 skel_bg = "#FBF7F0"

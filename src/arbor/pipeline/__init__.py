@@ -5,6 +5,7 @@ import json
 from typing import Any, Iterator
 
 from . import prompts
+from .compact import compact_to_text
 from .events import (
     BranchPartial,
     ExtractionStarted,
@@ -109,8 +110,17 @@ def extract_tree_stream(
     api_key = provider_api_key(config, provider)
     plugin = get_plugin(provider)
 
+    # Compaction phase: shrink long inputs before extraction
+    compaction_events: list = []
+    compacted_prose = compact_to_text(
+        prose, plugin, model_id, api_key,
+        on_event=lambda e: compaction_events.append(e),
+    )
+    for e in compaction_events:
+        yield e
+
     system = prompts.system_prompt_for(layers)
-    user_prompt = _build_user_prompt(prose, root_override)
+    user_prompt = _build_user_prompt(compacted_prose, root_override)
 
     yield ExtractionStarted(provider=provider, model_id=model_id)
 
