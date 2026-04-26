@@ -6,6 +6,7 @@ from typing import Any
 
 from . import prompts
 from .providers import get_plugin
+from .validate import ValidationFailure, validate_tree, truncate_high_fanout
 from ..config import get_model, provider_api_key
 
 
@@ -88,7 +89,7 @@ def extract_tree(
     config: dict[str, Any],
     layers: int = 3,
 ) -> dict[str, Any]:
-    """Provider-aware tree extraction. Same public signature as the old extract.py.
+    """Provider-aware tree extraction with validation and retry. Same public signature as the old extract.py.
 
     Args:
         prose: free-form input text.
@@ -103,20 +104,43 @@ def extract_tree(
 
     plugin = get_plugin(provider)
     system = prompts.system_prompt_for(layers)
-    user_prompt = _build_user_prompt(prose, root_override)
 
-    raw = plugin.extract(
-        prompt=user_prompt,
-        system=system,
-        schema=GEMINI_RESPONSE_SCHEMA,
-        model_id=model_id,
-        api_key=api_key,
-    )
+    def _ask(extra: str = "") -> dict:
+        msg = _build_user_prompt(prose, root_override)
+        if extra:
+            msg += f"\n\n{extra}"
+        raw = plugin.extract(
+            prompt=msg,
+            system=system,
+            schema=GEMINI_RESPONSE_SCHEMA,
+            model_id=model_id,
+            api_key=api_key,
+        )
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Provider returned non-JSON: {raw!r}") from exc
 
+    tree = _ask()
     try:
-        tree = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Provider returned non-JSON: {raw!r}") from exc
+        validate_tree(tree, layers=layers)
+    except ValidationFailure as e:
+        if e.reason == "leaf_fanout_high":
+            tree = truncate_high_fanout(tree)
+        else:
+            retry_msg = prompts.RETRY_PROMPT_PREFIX.format(
+                reason=str(e),
+                previous_tree=json.dumps(tree, indent=2),
+            )
+            retried = _ask(retry_msg)
+            try:
+                validate_tree(retried, layers=layers)
+                tree = retried
+            except ValidationFailure as e2:
+                if e2.reason == "leaf_fanout_high":
+                    tree = truncate_high_fanout(retried)
+                else:
+                    tree = retried
 
     if root_override:
         tree["root"] = root_override
