@@ -135,7 +135,7 @@ Open Settings -> **Add model** -> fill in id, label, provider -> Save. Or edit t
 
 ## Adding a new provider
 
-Today only `gemini` is wired in `src/mindbranches/extract.py`. Adding `anthropic`, `openai`, or anything else means writing one function:
+Today only `gemini` is wired in `src/mindbranches/extract.py`. Adding another provider means writing one function:
 
 ```python
 def _extract_<provider>(prose, root_override, model_id, api_key) -> dict:

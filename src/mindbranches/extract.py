@@ -1,8 +1,8 @@
 """Convert free-form prose into a branching tree.
 
 Provider-agnostic: dispatches on the configured model's ``provider`` field.
-Today only ``gemini`` is wired up; ``anthropic`` and ``openai`` have stubs that
-raise a clear error if selected -- add the SDK call here to enable them.
+Today only ``gemini`` is wired up. To add another provider, write a
+``_extract_<provider>`` function and add a branch in ``extract_tree``.
 """
 
 from __future__ import annotations

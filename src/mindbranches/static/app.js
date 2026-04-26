@@ -496,11 +496,8 @@ function closeSettings() {
 function renderSettings() {
   // Providers
   providerRows.innerHTML = "";
-  const knownProviders = ["gemini", "anthropic", "openai"];
   const providers = draftConfig.providers || (draftConfig.providers = {});
-  for (const name of knownProviders) {
-    if (!providers[name]) providers[name] = { has_key: false, api_key_value: "" };
-  }
+  if (!providers.gemini) providers.gemini = { has_key: false, api_key_value: "" };
   for (const [name, provider] of Object.entries(providers)) {
     const row = document.createElement("div");
     row.className = "provider-row";
