@@ -279,6 +279,18 @@ function formatBytes(n) {
   return `${(n / 1024 / 1024).toFixed(2)} MB`;
 }
 
+// macOS "Copy as Pathname" wraps the path in shell-style single quotes;
+// some shells use double quotes. Drop a single matching pair on submit.
+function stripWrappingQuotes(s) {
+  if (s.length >= 2) {
+    const a = s[0], b = s[s.length - 1];
+    if ((a === "'" && b === "'") || (a === '"' && b === '"')) {
+      return s.slice(1, -1);
+    }
+  }
+  return s;
+}
+
 // ---------- Submit ----------
 
 submitBtn.addEventListener("click", runJob);
@@ -287,7 +299,7 @@ filepathInput.addEventListener("keydown", (e) => {
 });
 
 async function runJob() {
-  const filepath = filepathInput.value.trim();
+  const filepath = stripWrappingQuotes(filepathInput.value.trim());
   if (!pendingFile && !filepath) return;
   if (!pendingFile && filepath.startsWith("[file:")) return;
 

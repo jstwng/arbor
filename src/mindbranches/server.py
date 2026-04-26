@@ -79,9 +79,22 @@ def _resolve_request(req: ConvertRequest) -> tuple[str, str, int]:
     return theme, model, width
 
 
+def _strip_wrapping_quotes(s: str) -> str:
+    """Drop one matching pair of leading/trailing single or double quotes.
+
+    macOS Finder's "Copy as Pathname" wraps the path in shell-style single
+    quotes; the input field receives them verbatim. Strip them so the user
+    doesn't have to.
+    """
+    s = s.strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in ("'", '"'):
+        return s[1:-1]
+    return s
+
+
 def _run_pipeline(job: Job, req: ConvertRequest) -> None:
     try:
-        path = Path(req.filepath).expanduser()
+        path = Path(_strip_wrapping_quotes(req.filepath)).expanduser()
         if not path.exists():
             _put_event(
                 job,
