@@ -114,35 +114,28 @@ select {
 
 input:focus, select:focus { border-color: var(--ink); }
 
-/* Custom select chevron -- thin, muted, identical position across browsers. */
-.select-wrap {
-  position: relative;
-}
-
-.select-wrap::after {
-  content: "";
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  border-right: 1px solid var(--muted);
-  border-bottom: 1px solid var(--muted);
-  transform: translate(0, -70%) rotate(45deg);
-  pointer-events: none;
-}
-
-.select-wrap select {
+/* Custom select chevron via inline SVG -- identical across browsers, no
+   wrapper element required. Suppress all native arrow drawing first, then
+   paint our own. */
+select {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  padding-right: 36px;
-  background-image: none;
   cursor: pointer;
+  padding-right: 38px;
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 10px 6px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237A7A7A' stroke-width='1.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
-.select-wrap select:hover { border-color: var(--ink); }
-.select-wrap:hover::after { border-color: var(--ink); }
+select:hover {
+  border-color: var(--ink);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%231A1A1A' stroke-width='1.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* IE / legacy: nuke the dropdown arrow if it sneaks back in */
+select::-ms-expand { display: none; }
 
 .filepath-row {
   display: flex;
@@ -529,10 +522,18 @@ li.step.done::before { background: var(--done); animation: none; }
   font-size: 12px;
 }
 
-.settings-table input[type="text"] {
+.settings-table input[type="text"],
+.settings-table select {
   padding: 6px 8px;
   font-size: 13px;
   font-family: inherit;
+  height: 32px;
+  width: 100%;
+}
+
+.settings-table select {
+  padding: 0 26px 0 8px;
+  background-position: right 8px center;
 }
 
 .settings-table input[type="checkbox"] {
