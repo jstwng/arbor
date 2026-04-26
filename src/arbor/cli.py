@@ -76,6 +76,28 @@ def main() -> None:
         action="store_true",
         help="Skip extraction; treat input as tree.json.",
     )
+    parser.add_argument(
+        "--provider",
+        choices=["gemini", "anthropic", "openai", "openai_compat"],
+        default=None,
+        help="Override the model's configured provider.",
+    )
+    parser.add_argument(
+        "--no-compact",
+        action="store_true",
+        help="Force pass_through compaction regardless of input size.",
+    )
+    parser.add_argument(
+        "--compact-strategy",
+        choices=["auto", "pass_through", "map_reduce_1", "map_reduce_recursive"],
+        default="auto",
+        help="Manually pick the compaction strategy.",
+    )
+    parser.add_argument(
+        "--no-stream",
+        action="store_true",
+        help="Disable streaming; collect the full response and parse once.",
+    )
     args = parser.parse_args()
 
     if not args.input.exists():
@@ -97,12 +119,16 @@ def main() -> None:
             f"Extracting tree via {args.model} -- {layers} layers{suffix}...",
             flush=True,
         )
+        compact_strategy = "pass_through" if args.no_compact else args.compact_strategy
         tree = extract_tree(
             prose,
             root_override=args.root,
             model_id=args.model,
             config=config,
             layers=layers,
+            provider_override=args.provider,
+            compact_strategy=compact_strategy,
+            stream=not args.no_stream,
         )
         tree = normalize_tree(tree)
         tree["layers"] = layers

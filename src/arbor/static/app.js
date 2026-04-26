@@ -580,6 +580,15 @@ function renderSettings() {
     input.addEventListener("input", () => { provider.api_key_value = input.value; });
     row.appendChild(input);
 
+    if (name === "openai_compat") {
+      const urlInput = document.createElement("input");
+      urlInput.type = "text";
+      urlInput.placeholder = "http://localhost:11434/v1";
+      urlInput.value = provider.base_url || "";
+      urlInput.addEventListener("input", () => { provider.base_url = urlInput.value; });
+      row.appendChild(urlInput);
+    }
+
     providerRows.appendChild(row);
   }
 
@@ -677,6 +686,10 @@ async function saveSettings() {
     const value = (provider.api_key_value || "").trim();
     if (value || !provider.has_key) {
       payload.providers[name] = { api_key: value };
+    }
+    if (name === "openai_compat" && provider.base_url !== undefined) {
+      if (!payload.providers[name]) payload.providers[name] = {};
+      payload.providers[name].base_url = (provider.base_url || "").trim();
     }
   }
   saveSettingsBtn.disabled = true;

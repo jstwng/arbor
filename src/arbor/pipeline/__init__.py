@@ -98,23 +98,37 @@ def extract_tree_stream(
     model_id: str,
     config: dict[str, Any],
     layers: int = 3,
+    *,
+    provider_override: str | None = None,
+    compact_strategy: str = "auto",
+    stream: bool = True,
 ) -> Iterator[Any]:
     """Streaming tree extraction. Yields TreeEvents as the model responds.
 
     Events emitted (in order):
       ExtractionStarted, TextDelta* (one per chunk), BranchPartial* (one per
       completed branch), optionally ValidationRetry, then TreeComplete.
+
+    Args:
+        provider_override: if set, overrides the model's configured provider.
+        compact_strategy: "auto" (default) or a specific strategy name to force
+            ("pass_through", "map_reduce_1", "map_reduce_recursive").
+        stream: if False, skips the streaming code path and calls plugin.extract()
+            directly. No TextDelta or BranchPartial events are emitted.
     """
     model = get_model(config, model_id)
-    provider = model["provider"]
+    provider = provider_override if provider_override is not None else model["provider"]
     api_key = provider_api_key(config, provider)
     plugin = get_plugin(provider, config=config)
+
+    force_strategy = None if compact_strategy == "auto" else compact_strategy
 
     # Compaction phase: shrink long inputs before extraction
     compaction_events: list = []
     compacted_prose = compact_to_text(
         prose, plugin, model_id, api_key,
         on_event=lambda e: compaction_events.append(e),
+        force_strategy=force_strategy,
     )
     for e in compaction_events:
         yield e
@@ -123,6 +137,62 @@ def extract_tree_stream(
     user_prompt = _build_user_prompt(compacted_prose, root_override)
 
     yield ExtractionStarted(provider=provider, model_id=model_id)
+
+    if not stream:
+        # Non-streaming path: single extract() call, no TextDelta/BranchPartial events.
+        raw = plugin.extract(
+            prompt=user_prompt,
+            system=system,
+            schema=GEMINI_RESPONSE_SCHEMA,
+            model_id=model_id,
+            api_key=api_key,
+        )
+        final_text = strip_fences(raw)
+        try:
+            final = json.loads(final_text)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Provider returned non-JSON: {final_text!r}") from exc
+        if root_override:
+            final["root"] = root_override
+        final["layers"] = layers
+        try:
+            validate_tree(final, layers=layers)
+            yield TreeComplete(tree=final)
+        except ValidationFailure as e:
+            if e.reason == "leaf_fanout_high":
+                yield TreeComplete(tree=truncate_high_fanout(final))
+                return
+            yield ValidationRetry(reason=str(e), attempt=1)
+            retry_user_prompt = (
+                user_prompt
+                + "\n\n"
+                + prompts.RETRY_PROMPT_PREFIX.format(
+                    reason=str(e),
+                    previous_tree=json.dumps(final, indent=2),
+                )
+            )
+            retried_raw = plugin.extract(
+                prompt=retry_user_prompt,
+                system=system,
+                schema=GEMINI_RESPONSE_SCHEMA,
+                model_id=model_id,
+                api_key=api_key,
+            )
+            try:
+                retried = json.loads(retried_raw)
+            except json.JSONDecodeError:
+                yield TreeComplete(tree=final)
+                return
+            if root_override:
+                retried["root"] = root_override
+            retried["layers"] = layers
+            try:
+                validate_tree(retried, layers=layers)
+            except ValidationFailure as e2:
+                if e2.reason == "leaf_fanout_high":
+                    retried = truncate_high_fanout(retried)
+            yield TreeComplete(tree=retried)
+        return
 
     buf = ""
     seen = 0
@@ -201,6 +271,10 @@ def extract_tree(
     model_id: str,
     config: dict[str, Any],
     layers: int = 3,
+    *,
+    provider_override: str | None = None,
+    compact_strategy: str = "auto",
+    stream: bool = True,
 ) -> dict[str, Any]:
     """Provider-aware tree extraction with validation and retry. Same public signature as the old extract.py.
 
@@ -210,9 +284,17 @@ def extract_tree(
         model_id: an id present in config["models"] (e.g. "gemini-2.5-flash").
         config: full loaded config dict.
         layers: total tree depth, 2 to 5. Layer 1 is the root, layer N is leaves.
+        provider_override: if set, overrides the model's configured provider.
+        compact_strategy: "auto" or a specific strategy name.
+        stream: if False, disables streaming and collects the full response at once.
     """
     final: dict[str, Any] | None = None
-    for evt in extract_tree_stream(prose, root_override, model_id, config, layers):
+    for evt in extract_tree_stream(
+        prose, root_override, model_id, config, layers,
+        provider_override=provider_override,
+        compact_strategy=compact_strategy,
+        stream=stream,
+    ):
         if isinstance(evt, TreeComplete):
             final = evt.tree
         elif isinstance(evt, PipelineError):

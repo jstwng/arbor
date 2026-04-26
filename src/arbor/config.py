@@ -150,6 +150,24 @@ def load_config() -> dict[str, Any]:
             config[key] = copy.deepcopy(default_value)
             mutated = True
 
+    # Heal: add any providers from DEFAULT_CONFIG not present in the saved config.
+    saved_providers = config.setdefault("providers", {})
+    for name, default_provider in DEFAULT_CONFIG["providers"].items():
+        if name not in saved_providers:
+            saved_providers[name] = copy.deepcopy(default_provider)
+            mutated = True
+
+    # Heal: add any models from DEFAULT_CONFIG whose id is not already present.
+    saved_model_ids = {m["id"] for m in config.get("models", [])}
+    for default_model in DEFAULT_CONFIG["models"]:
+        if default_model["id"] not in saved_model_ids:
+            # Append but don't make it the default if a default already exists.
+            entry = copy.deepcopy(default_model)
+            if any(m.get("default") for m in config.get("models", [])):
+                entry.pop("default", None)
+            config.setdefault("models", []).append(entry)
+            mutated = True
+
     if _migrate_from_env(config):
         mutated = True
 

@@ -55,11 +55,18 @@ If no key is configured, the Settings modal opens automatically. Paste your key 
 ```json
 {
   "providers": {
-    "gemini": { "api_key": "AIza..." }
+    "gemini":        { "api_key": "AIza..." },
+    "anthropic":     { "api_key": "sk-ant-..." },
+    "openai":        { "api_key": "sk-..." },
+    "openai_compat": { "base_url": "http://localhost:11434/v1", "api_key": "ollama" }
   },
   "models": [
-    { "id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash", "provider": "gemini", "default": true },
-    { "id": "gemini-2.5-pro",   "label": "Gemini 2.5 Pro",   "provider": "gemini" }
+    { "id": "gemini-2.5-flash",    "label": "Gemini 2.5 Flash",    "provider": "gemini",        "default": true },
+    { "id": "gemini-2.5-pro",      "label": "Gemini 2.5 Pro",      "provider": "gemini" },
+    { "id": "claude-sonnet-4-6",   "label": "Claude Sonnet 4.6",   "provider": "anthropic" },
+    { "id": "claude-opus-4-7",     "label": "Claude Opus 4.7",     "provider": "anthropic" },
+    { "id": "gpt-5",               "label": "GPT-5",               "provider": "openai" },
+    { "id": "llama3.1:8b",         "label": "Llama 3.1 8B (local)","provider": "openai_compat" }
   ],
   "themes": [
     { "id": "cream", "label": "Cream", "default": true },
@@ -116,8 +123,25 @@ Flags:
 | `--model <id>` | Model id (must exist in config) |
 | `--layers N` | Tree depth, 2-5. Layer 1 is the root, layer N is leaves. Default: auto-suggested from input size (2 short, 3 article-length, 4 long-form, 5 book-length). |
 | `--from-tree` | Treat the input file as `tree.json`, skip the LLM call |
+| `--provider <id>` | Override the model's configured provider (`gemini`, `anthropic`, `openai`, `openai_compat`) |
+| `--no-compact` | Force pass-through compaction regardless of input size |
+| `--compact-strategy <s>` | Manually pick compaction: `auto` (default), `pass_through`, `map_reduce_1`, `map_reduce_recursive` |
+| `--no-stream` | Disable streaming; collect the full response and parse once |
 
 `--theme` and `--model` choices come from your config, so adding a new model in settings makes it instantly available on the CLI.
+
+### Local models
+
+Run local models through any OpenAI-compatible server (Ollama, LM Studio, llama.cpp, etc.).
+
+```bash
+# Run Ollama locally first
+ollama pull llama3.1:8b
+# Then in arbor's Settings, set openai_compat base_url to http://localhost:11434/v1
+arbor notes.txt --model llama3.1:8b
+```
+
+No API key required for Ollama — the default config sets `api_key: "ollama"` as a placeholder, which Ollama ignores.
 
 ### Outputs
 
@@ -136,14 +160,9 @@ Open Settings -> **Add model** -> fill in id, label, provider -> Save. Or edit t
 
 ## Adding a new provider
 
-Today only `gemini` is wired in `src/arbor/extract.py`. Adding another provider means writing one function:
+Four providers are built in: `gemini`, `anthropic`, `openai`, and `openai_compat` (any OpenAI-compatible endpoint).
 
-```python
-def _extract_<provider>(prose, root_override, model_id, api_key) -> dict:
-    # call the SDK, return {"root": "...", "branches": [...]}
-```
-
-Then add a branch to `extract_tree`. PRs welcome.
+To add a fifth, implement `src/arbor/pipeline/providers/<name>.py` conforming to the `Plugin` protocol in `providers/base.py`, then register it in `providers/__init__.py`. PRs welcome.
 
 ---
 

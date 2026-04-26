@@ -73,18 +73,22 @@ def compact_to_text(
     model_id: str,
     api_key: str,
     on_event=None,
+    force_strategy: str | None = None,
 ) -> str:
     """Run the chosen strategy and return compacted prose.
 
     `on_event(evt)` receives CompactionStarted / ChunkSummarized / CompactionFinished
     events as they happen. Caller forwards to SSE (or ignores).
+
+    `force_strategy`: if set, bypasses `pick_strategy` and uses this strategy directly.
+    Valid values: "pass_through", "map_reduce_1", "map_reduce_recursive".
     """
 
     def emit(evt: Any) -> None:
         if on_event is not None:
             on_event(evt)
 
-    strategy = pick_strategy(prose)
+    strategy = force_strategy if force_strategy is not None else pick_strategy(prose)
     if strategy == "pass_through":
         emit(CompactionStarted(strategy="pass_through", chunk_count=1))
         emit(CompactionFinished(compact_prose_chars=len(prose)))
@@ -102,7 +106,7 @@ def compact_to_text(
     combined = "\n\n".join(summaries)
 
     if strategy == "map_reduce_recursive" and len(combined) > PASS_THROUGH_THRESHOLD:
-        return compact_to_text(combined, plugin, model_id, api_key, on_event=on_event)
+        return compact_to_text(combined, plugin, model_id, api_key, on_event=on_event, force_strategy=force_strategy)
 
     emit(CompactionFinished(compact_prose_chars=len(combined)))
     return combined
