@@ -441,7 +441,7 @@ li.step {
 li.step::before {
   content: "";
   position: absolute;
-  left: -5px;
+  left: -9px;
   top: 18px;
   width: 9px;
   height: 9px;
