@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -154,6 +154,18 @@ def create_app() -> FastAPI:
     APP_CONFIG.update(load_config())
 
     app = FastAPI(title="MindBranches Portal")
+
+    # Local-dev tool: never cache portal HTML/CSS/JS so iterating on the
+    # frontend doesn't get masked by a stale browser cache.
+    @app.middleware("http")
+    async def no_cache_static(request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if path == "/" or path.startswith("/static"):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
 
     @app.get("/", response_class=HTMLResponse)
     async def root() -> HTMLResponse:
