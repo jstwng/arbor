@@ -31,7 +31,7 @@ from .render import render_html, render_png_via_playwright, render_svg
 
 PKG_ROOT = Path(__file__).parent
 STATIC_DIR = PKG_ROOT / "static"
-JOBS_ROOT = Path.home() / ".cache" / "mindbranches"
+JOBS_ROOT = Path.home() / ".cache" / "arbor"
 JOBS_ROOT.mkdir(parents=True, exist_ok=True)
 
 # Single mutable config dict held on the app. Updated in-place when the user
@@ -175,7 +175,7 @@ def create_app() -> FastAPI:
     APP_CONFIG.clear()
     APP_CONFIG.update(load_config())
 
-    app = FastAPI(title="MindBranches Portal")
+    app = FastAPI(title="Arbor Portal")
 
     # Local-dev tool: never cache portal HTML/CSS/JS so iterating on the
     # frontend doesn't get masked by a stale browser cache.
@@ -305,16 +305,16 @@ def create_app() -> FastAPI:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="mindbranches-portal")
+    parser = argparse.ArgumentParser(prog="arbor-portal")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
 
     import uvicorn
 
-    print(f"\nMindBranches portal: http://{args.host}:{args.port}\n", flush=True)
+    print(f"\nArbor portal: http://{args.host}:{args.port}\n", flush=True)
     uvicorn.run(
-        "mindbranches.server:create_app",
+        "arbor.server:create_app",
         host=args.host,
         port=args.port,
         factory=True,

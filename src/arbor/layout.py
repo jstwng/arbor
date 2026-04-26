@@ -1,4 +1,4 @@
-"""Pure-Python geometry for the MindBranches diagram.
+"""Pure-Python geometry for the Arbor diagram.
 
 Recursive horizontal fan: every level fans rightward from its parent.
 Each subtree gets a vertical extent equal to the sum of its descendants.

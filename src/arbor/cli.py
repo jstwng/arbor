@@ -1,4 +1,4 @@
-"""CLI entrypoint for the mindbranches generator."""
+"""CLI entrypoint for the arbor generator."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ def main() -> None:
     default_width = config.get("defaults", {}).get("width", 1600)
 
     parser = argparse.ArgumentParser(
-        prog="mindbranches",
-        description="Generate MindBranches-style diagrams from prose.",
+        prog="arbor",
+        description="Generate Arbor-style diagrams from prose.",
     )
     parser.add_argument(
         "input",

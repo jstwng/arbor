@@ -12,7 +12,7 @@ from typing import Any
 
 from .config import get_model, provider_api_key
 
-SYSTEM_PROMPT_TEMPLATE = """You convert prose into a hierarchical mind-map structure for the MindBranches visual format.
+SYSTEM_PROMPT_TEMPLATE = """You convert prose into a hierarchical mind-map structure for the Arbor visual format.
 
 You will produce a tree of EXACTLY {layers} layers. Layer 1 is the root concept. The deepest layer (layer {layers}) carries the actual ideas. The intermediate layers are short category labels that group those ideas.
 
@@ -135,7 +135,7 @@ def _extract_gemini(
     if not api_key:
         raise RuntimeError(
             "Gemini API key not configured. Open the portal settings (gear icon) "
-            "or edit ~/.config/mindbranches/config.json."
+            "or edit ~/.config/arbor/config.json."
         )
 
     from google import genai
@@ -189,7 +189,7 @@ def extract_tree(
     else:
         raise RuntimeError(
             f"Provider {provider!r} not implemented yet. "
-            f"Add a handler in mindbranches/extract.py to enable it."
+            f"Add a handler in arbor/extract.py to enable it."
         )
 
     if root_override:

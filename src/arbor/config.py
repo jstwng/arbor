@@ -1,6 +1,6 @@
 """User-editable configuration: providers, models, themes, defaults.
 
-Stored at ``~/.config/mindbranches/config.json``. Auto-created on first run
+Stored at ``~/.config/arbor/config.json``. Auto-created on first run
 with sensible defaults. ``GEMINI_API_KEY`` from a project-local ``.env`` is
 auto-migrated into the config on first run so existing setups keep working.
 """
@@ -13,8 +13,13 @@ import os
 from pathlib import Path
 from typing import Any
 
-CONFIG_DIR = Path.home() / ".config" / "mindbranches"
+CONFIG_DIR = Path.home() / ".config" / "arbor"
 CONFIG_PATH = CONFIG_DIR / "config.json"
+
+# Legacy path -- earlier releases stored config under a different name.
+# Kept for one-shot migration on first arbor run.
+LEGACY_CONFIG_DIR = Path.home() / ".config" / "mindbranches"
+LEGACY_CONFIG_PATH = LEGACY_CONFIG_DIR / "config.json"
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "providers": {
@@ -89,6 +94,15 @@ def _migrate_from_env(config: dict[str, Any]) -> bool:
 def load_config() -> dict[str, Any]:
     """Load config from disk, creating defaults + migrating env on first run."""
     if not CONFIG_PATH.exists():
+        # First run -- carry over a legacy config if one exists.
+        if LEGACY_CONFIG_PATH.exists():
+            try:
+                config = json.loads(LEGACY_CONFIG_PATH.read_text())
+                _migrate_from_env(config)
+                save_config(config)
+                return config
+            except Exception:
+                pass
         config = copy.deepcopy(DEFAULT_CONFIG)
         _migrate_from_env(config)
         save_config(config)

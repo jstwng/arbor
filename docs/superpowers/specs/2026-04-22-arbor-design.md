@@ -1,4 +1,4 @@
-# MindBranches Generator -- Design Spec
+# Arbor Generator -- Design Spec
 
 **Date:** 2026-04-22
 **Owner:** Justin Wang
@@ -6,9 +6,9 @@
 
 ## Purpose
 
-A Python CLI that ingests a free-form `.txt` file of prose and produces a MindBranches-style horizontal mind-map diagram in three formats: SVG (canonical), HTML (browser preview), and PNG (post-ready).
+A Python CLI that ingests a free-form `.txt` file of prose and produces a Arbor-style horizontal mind-map diagram in three formats: SVG (canonical), HTML (browser preview), and PNG (post-ready).
 
-Reference account: https://x.com/MindBranches -- clean, ink-on-paper branching diagrams used to organize concepts visually. Root concept anchored on the left, category branches fanning to the right, sub-bullets under each branch.
+Reference account: https://x.com/Arbor -- clean, ink-on-paper branching diagrams used to organize concepts visually. Root concept anchored on the left, category branches fanning to the right, sub-bullets under each branch.
 
 ## Non-goals
 
@@ -91,7 +91,7 @@ The intermediate `tree.json` is canonical between extraction and rendering. User
 
 ### `cli.py`
 
-- argparse entrypoint installed as `mindbranches` (via `pyproject.toml` script entry).
+- argparse entrypoint installed as `arbor` (via `pyproject.toml` script entry).
 - Required positional: `input.txt` (or `tree.json` when `--from-tree` is set).
 - Flags:
   - `--out PATH` (default: `./out`)
@@ -100,13 +100,13 @@ The intermediate `tree.json` is canonical between extraction and rendering. User
   - `--theme <id>` palette (choices populate from config; default `cream`)
   - `--model <id>` (choices populate from config; default = the model marked default in config)
   - `--from-tree` interpret input as `tree.json`, skip extraction
-- Reads provider API keys from `~/.config/mindbranches/config.json` (auto-migrates from a `.env` `GEMINI_API_KEY` on first run).
+- Reads provider API keys from `~/.config/arbor/config.json` (auto-migrates from a `.env` `GEMINI_API_KEY` on first run).
 
 ## Visual style
 
 **Layout:** horizontal mind map. Root anchored center-left; branches stack vertically on the right; each connected by a smooth bezier. Sub-bullets sit beneath each branch pill, indented, no bullet glyphs.
 
-**Typography:** Inter (Regular, Medium, Bold), bundled in `src/mindbranches/fonts/`.
+**Typography:** Inter (Regular, Medium, Bold), bundled in `src/arbor/fonts/`.
 - Root: 30px Bold
 - Branch label: 20px Medium
 - Sub-bullet: 15px Regular, line-height 1.5
@@ -138,11 +138,11 @@ Accents cycle by index. If there are more than 6 branches, the cycle repeats.
 ## Folder layout
 
 ```
-mindbranches/
+arbor/
   pyproject.toml
   README.md
-  docs/superpowers/specs/2026-04-22-mindbranches-design.md
-  src/mindbranches/
+  docs/superpowers/specs/2026-04-22-arbor-design.md
+  src/arbor/
     __init__.py
     cli.py
     config.py
@@ -167,7 +167,7 @@ mindbranches/
 
 ## Error handling
 
-- Missing API key for the chosen provider: hard error pointing the user at the portal Settings (gear icon) or `~/.config/mindbranches/config.json`.
+- Missing API key for the chosen provider: hard error pointing the user at the portal Settings (gear icon) or `~/.config/arbor/config.json`.
 - Empty / whitespace-only input file: hard error.
 - LLM returns invalid tree (the schema constrains shape, but if it fails): print the raw response and exit non-zero.
 - Playwright not installed: print install hint (`playwright install chromium`) and exit. SVG and HTML are still written even if PNG step fails -- those are produced before the screenshot call.
@@ -176,7 +176,7 @@ mindbranches/
 
 - `tests/test_layout.py`: unit tests over `compute_layout` with hand-written tree fixtures. Verify: no overlaps, root within canvas, bezier endpoints anchored to correct edges.
 - `tests/test_extract.py`: skipped by default unless `RUN_API_TESTS=1`. Sanity-checks shape on a small prose fixture.
-- Manual: `examples/sample-prose.txt` runs end-to-end and produces visible artifacts. Eyeball check against MindBranches reference.
+- Manual: `examples/sample-prose.txt` runs end-to-end and produces visible artifacts. Eyeball check against Arbor reference.
 
 ## Web portal
 
@@ -211,7 +211,7 @@ Each event is `event: <name>\ndata: <json>\n\n`. Names in order:
 
 ### Frontend
 
-Single-page UI in `src/mindbranches/static/`:
+Single-page UI in `src/arbor/static/`:
 
 - `index.html` -- markup with header, settings gear, file row (text input + Choose file button + drop zone), theme/model/width selects, root override, submit. Status trail and downloads sections are hidden until a job runs.
 - `app.js` -- vanilla JS, no framework. Custom dropdown component (replaces native `<select>` so the open menu is fully styled). On submit: POSTs to `/upload` (with held file) or `/convert` (with typed path), opens EventSource on `/status/{job_id}`, drives the live preview and status trail.
@@ -219,17 +219,17 @@ Single-page UI in `src/mindbranches/static/`:
 
 ### Job storage
 
-In-memory dict for v1: `jobs[job_id] = {"status": "...", "events": [...], "out_dir": "..."}`. Outputs written to `~/.cache/mindbranches/<job_id>/`. Old jobs are not auto-cleaned (manual delete if needed).
+In-memory dict for v1: `jobs[job_id] = {"status": "...", "events": [...], "out_dir": "..."}`. Outputs written to `~/.cache/arbor/<job_id>/`. Old jobs are not auto-cleaned (manual delete if needed).
 
 ### Run command
 
 ```
-mindbranches-portal              # starts uvicorn on http://127.0.0.1:8765
-mindbranches-portal --port 9000  # custom port
+arbor-portal              # starts uvicorn on http://127.0.0.1:8765
+arbor-portal --port 9000  # custom port
 ```
 
 ## Open issues / deferred
 
 - Auto-posting to X: out of scope for v1. Manual upload of `output.png`.
 - Custom fonts: hardcoded to Inter for v1. Could expose `--font` later.
-- Sub-branch nesting (3+ levels deep): not supported. Tree is exactly 2 levels (branch + children). Reflects MindBranches' actual style.
+- Sub-branch nesting (3+ levels deep): not supported. Tree is exactly 2 levels (branch + children). Reflects Arbor' actual style.

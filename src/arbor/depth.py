@@ -6,7 +6,7 @@ counts the root as layer 1 and the deepest leaf level as layer ``N``.
 
 Examples for layers = N:
 - N = 2: root + leaf branches (one ring of labels under the root)
-- N = 3: root + section nodes + leaf children (the original MindBranches shape)
+- N = 3: root + section nodes + leaf children (the original Arbor shape)
 - N = 4: root + section + subsection + leaf
 - N = 5: root + part + section + subsection + leaf
 """
