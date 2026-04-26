@@ -114,7 +114,7 @@ select {
 
 input:focus, select:focus { border-color: var(--ink); }
 
-/* Custom select chevron — kills the native arrow whose position differs across browsers. */
+/* Custom select chevron -- thin, muted, identical position across browsers. */
 .select-wrap {
   position: relative;
 }
@@ -122,15 +122,14 @@ input:focus, select:focus { border-color: var(--ink); }
 .select-wrap::after {
   content: "";
   position: absolute;
-  right: 14px;
+  right: 16px;
   top: 50%;
-  width: 9px;
-  height: 9px;
-  border-right: 1.5px solid var(--ink);
-  border-bottom: 1.5px solid var(--ink);
-  transform: translateY(-70%) rotate(45deg);
+  width: 6px;
+  height: 6px;
+  border-right: 1px solid var(--muted);
+  border-bottom: 1px solid var(--muted);
+  transform: translate(0, -70%) rotate(45deg);
   pointer-events: none;
-  opacity: 0.6;
 }
 
 .select-wrap select {
@@ -139,7 +138,11 @@ input:focus, select:focus { border-color: var(--ink); }
   -moz-appearance: none;
   padding-right: 36px;
   background-image: none;
+  cursor: pointer;
 }
+
+.select-wrap select:hover { border-color: var(--ink); }
+.select-wrap:hover::after { border-color: var(--ink); }
 
 .filepath-row {
   display: flex;
