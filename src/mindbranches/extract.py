@@ -1,18 +1,16 @@
-"""Convert free-form prose into a branching tree via Gemini structured JSON output."""
+"""Convert free-form prose into a branching tree.
+
+Provider-agnostic: dispatches on the configured model's ``provider`` field.
+Today only ``gemini`` is wired up; ``anthropic`` and ``openai`` have stubs that
+raise a clear error if selected -- add the SDK call here to enable them.
+"""
 
 from __future__ import annotations
 
 import json
-import os
 from typing import Any
 
-from google import genai
-from google.genai import types
-
-MODEL_MAP = {
-    "flash": "gemini-2.5-flash",
-    "flash-lite": "gemini-2.5-flash-lite",
-}
+from .config import get_model, provider_api_key
 
 SYSTEM_PROMPT = """You convert prose into a horizontal mind-map structure for the MindBranches visual format.
 
@@ -31,7 +29,7 @@ Rules:
 Return only valid JSON matching the response schema. Do not include any commentary.
 """
 
-RESPONSE_SCHEMA: dict[str, Any] = {
+GEMINI_RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["root", "branches"],
     "properties": {
@@ -55,33 +53,38 @@ RESPONSE_SCHEMA: dict[str, Any] = {
 }
 
 
-def extract_tree(
+def _build_user_prompt(prose: str, root_override: str | None) -> str:
+    parts: list[str] = []
+    if root_override:
+        parts.append(f"Use this exact root concept: {root_override!r}.\n\n")
+    parts.append(f"Prose:\n\n{prose.strip()}")
+    return "".join(parts)
+
+
+def _extract_gemini(
     prose: str,
-    root_override: str | None = None,
-    model: str = "flash",
+    root_override: str | None,
+    model_id: str,
+    api_key: str,
 ) -> dict[str, Any]:
-    """Call Gemini with structured JSON output to convert prose into a MindBranches tree."""
-    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError(
-            "GEMINI_API_KEY not set. Add it to .env or export it in your shell."
+            "Gemini API key not configured. Open the portal settings (gear icon) "
+            "or edit ~/.config/mindbranches/config.json."
         )
 
-    client = genai.Client(api_key=api_key)
-    model_id = MODEL_MAP.get(model, model)
+    from google import genai
+    from google.genai import types
 
-    user_parts: list[str] = []
-    if root_override:
-        user_parts.append(f"Use this exact root concept: {root_override!r}.\n\n")
-    user_parts.append(f"Prose:\n\n{prose.strip()}")
+    client = genai.Client(api_key=api_key)
 
     response = client.models.generate_content(
         model=model_id,
-        contents="".join(user_parts),
+        contents=_build_user_prompt(prose, root_override),
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
             response_mime_type="application/json",
-            response_schema=RESPONSE_SCHEMA,
+            response_schema=GEMINI_RESPONSE_SCHEMA,
             temperature=0.3,
         ),
     )
@@ -91,9 +94,36 @@ def extract_tree(
         raise RuntimeError(f"Gemini returned empty response: {response!r}")
 
     try:
-        tree = json.loads(text)
+        return json.loads(text)
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"Gemini returned non-JSON: {text!r}") from exc
+
+
+def extract_tree(
+    prose: str,
+    root_override: str | None,
+    model_id: str,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """Provider-aware tree extraction.
+
+    Args:
+        prose: free-form input text.
+        root_override: if given, used verbatim as the root; the model only fills branches.
+        model_id: an id present in config["models"] (e.g. "gemini-2.5-flash").
+        config: full loaded config dict.
+    """
+    model = get_model(config, model_id)
+    provider = model["provider"]
+    api_key = provider_api_key(config, provider)
+
+    if provider == "gemini":
+        tree = _extract_gemini(prose, root_override, model_id, api_key)
+    else:
+        raise RuntimeError(
+            f"Provider {provider!r} not implemented yet. "
+            f"Add a handler in mindbranches/extract.py to enable it."
+        )
 
     if root_override:
         tree["root"] = root_override

@@ -7,15 +7,19 @@ import json
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
-
+from .config import default_model_id, default_theme_id, load_config
 from .extract import extract_tree
 from .layout import compute_layout
 from .render import write_outputs
 
 
 def main() -> None:
-    load_dotenv()
+    config = load_config()
+    model_choices = [m["id"] for m in config.get("models", [])]
+    theme_choices = [t["id"] for t in config.get("themes", [])]
+    default_model = default_model_id(config)
+    default_theme = default_theme_id(config)
+    default_width = config.get("defaults", {}).get("width", 1600)
 
     parser = argparse.ArgumentParser(
         prog="mindbranches",
@@ -40,19 +44,20 @@ def main() -> None:
     parser.add_argument(
         "--width",
         type=int,
-        default=1600,
-        help="Canvas width in px.",
+        default=default_width,
+        help=f"Canvas width in px (default {default_width}).",
     )
     parser.add_argument(
         "--theme",
-        choices=["cream", "dark", "mono"],
-        default="cream",
+        choices=theme_choices,
+        default=default_theme,
+        help=f"Theme id (default {default_theme}).",
     )
     parser.add_argument(
         "--model",
-        choices=["flash", "flash-lite"],
-        default="flash",
-        help="Gemini model: flash (gemini-2.5-flash) or flash-lite (cheaper).",
+        choices=model_choices,
+        default=default_model,
+        help=f"Model id from config (default {default_model}).",
     )
     parser.add_argument(
         "--from-tree",
@@ -72,8 +77,10 @@ def main() -> None:
         if not prose:
             print("Error: input file is empty.", file=sys.stderr)
             sys.exit(1)
-        print(f"Extracting tree via Gemini {args.model}...", flush=True)
-        tree = extract_tree(prose, root_override=args.root, model=args.model)
+        print(f"Extracting tree via {args.model}...", flush=True)
+        tree = extract_tree(
+            prose, root_override=args.root, model_id=args.model, config=config
+        )
 
     print(
         f"Computing layout (theme={args.theme}, width={args.width})...",

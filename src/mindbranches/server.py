@@ -11,13 +11,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
+from .config import (
+    default_model_id,
+    default_theme_id,
+    load_config,
+    public_config,
+    save_config,
+)
 from .extract import extract_tree
 from .layout import compute_layout
 from .render import render_html, render_png_via_playwright, render_svg
@@ -26,6 +32,10 @@ PKG_ROOT = Path(__file__).parent
 STATIC_DIR = PKG_ROOT / "static"
 JOBS_ROOT = Path.home() / ".cache" / "mindbranches"
 JOBS_ROOT.mkdir(parents=True, exist_ok=True)
+
+# Single mutable config dict held on the app. Updated in-place when the user
+# saves changes via POST /config so background pipeline runs see the new values.
+APP_CONFIG: dict[str, Any] = {}
 
 
 @dataclass
@@ -42,10 +52,17 @@ JOBS: dict[str, Job] = {}
 
 class ConvertRequest(BaseModel):
     filepath: str
-    theme: str = "cream"
-    model: str = "flash"
+    theme: str | None = None
+    model: str | None = None
     root: str | None = None
-    width: int = 1600
+    width: int | None = None
+
+
+class ConfigUpdate(BaseModel):
+    providers: dict[str, dict[str, str]] | None = None
+    models: list[dict[str, Any]] | None = None
+    themes: list[dict[str, Any]] | None = None
+    defaults: dict[str, Any] | None = None
 
 
 def _put_event(job: Job, event: str, payload: dict[str, Any] | None = None) -> None:
@@ -53,6 +70,13 @@ def _put_event(job: Job, event: str, payload: dict[str, Any] | None = None) -> N
         return
     item = {"event": event, "data": json.dumps(payload or {})}
     asyncio.run_coroutine_threadsafe(job.queue.put(item), job.loop)
+
+
+def _resolve_request(req: ConvertRequest) -> tuple[str, str, int]:
+    theme = req.theme or default_theme_id(APP_CONFIG)
+    model = req.model or default_model_id(APP_CONFIG)
+    width = req.width or APP_CONFIG.get("defaults", {}).get("width", 1600)
+    return theme, model, width
 
 
 def _run_pipeline(job: Job, req: ConvertRequest) -> None:
@@ -77,12 +101,19 @@ def _run_pipeline(job: Job, req: ConvertRequest) -> None:
             )
             return
 
-        _put_event(job, "extracting_tree", {"model": req.model})
-        tree = extract_tree(prose, root_override=req.root, model=req.model)
+        theme, model, width = _resolve_request(req)
+
+        _put_event(job, "extracting_tree", {"model": model})
+        tree = extract_tree(
+            prose,
+            root_override=req.root,
+            model_id=model,
+            config=APP_CONFIG,
+        )
         _put_event(job, "tree_ready", {"tree": tree})
 
-        _put_event(job, "computing_layout", {"theme": req.theme, "width": req.width})
-        layout = compute_layout(tree, width=req.width, theme=req.theme)
+        _put_event(job, "computing_layout", {"theme": theme, "width": width})
+        layout = compute_layout(tree, width=width, theme=theme)
 
         _put_event(job, "rendering_svg", {})
         svg = render_svg(layout)
@@ -93,7 +124,6 @@ def _run_pipeline(job: Job, req: ConvertRequest) -> None:
         html = render_html(svg, bg=layout.bg)
         (job.out_dir / "output.html").write_text(html)
 
-        # File now exists on disk; frontend can embed it live before the PNG step.
         _put_event(job, "preview_ready", {"bg": layout.bg})
 
         _put_event(job, "screenshotting_png", {"estimate_seconds": 2})
@@ -120,7 +150,9 @@ def _run_pipeline(job: Job, req: ConvertRequest) -> None:
 
 
 def create_app() -> FastAPI:
-    load_dotenv()
+    APP_CONFIG.clear()
+    APP_CONFIG.update(load_config())
+
     app = FastAPI(title="MindBranches Portal")
 
     @app.get("/", response_class=HTMLResponse)
@@ -128,6 +160,27 @@ def create_app() -> FastAPI:
         return HTMLResponse((STATIC_DIR / "index.html").read_text())
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    @app.get("/config")
+    async def get_config_endpoint() -> dict[str, Any]:
+        return public_config(APP_CONFIG)
+
+    @app.post("/config")
+    async def post_config_endpoint(update: ConfigUpdate) -> dict[str, Any]:
+        if update.providers is not None:
+            providers = APP_CONFIG.setdefault("providers", {})
+            for name, payload in update.providers.items():
+                provider = providers.setdefault(name, {})
+                if "api_key" in payload:
+                    provider["api_key"] = payload["api_key"].strip()
+        if update.models is not None:
+            APP_CONFIG["models"] = update.models
+        if update.themes is not None:
+            APP_CONFIG["themes"] = update.themes
+        if update.defaults is not None:
+            APP_CONFIG.setdefault("defaults", {}).update(update.defaults)
+        save_config(APP_CONFIG)
+        return public_config(APP_CONFIG)
 
     @app.post("/convert")
     async def convert(req: ConvertRequest) -> dict[str, str]:
@@ -145,10 +198,10 @@ def create_app() -> FastAPI:
     @app.post("/upload")
     async def upload(
         file: UploadFile = File(...),
-        theme: str = Form("cream"),
-        model: str = Form("flash"),
+        theme: str | None = Form(None),
+        model: str | None = Form(None),
         root: str | None = Form(None),
-        width: int = Form(1600),
+        width: int | None = Form(None),
     ) -> dict[str, str]:
         job_id = uuid.uuid4().hex[:12]
         out_dir = JOBS_ROOT / job_id

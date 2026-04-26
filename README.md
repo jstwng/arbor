@@ -1,68 +1,177 @@
 # mindbranches
 
-Generate MindBranches-style horizontal mind-map diagrams from free-form prose.
+Turn a `.txt` file of prose into a horizontal mind-map diagram. SVG, HTML, and PNG, in one shot. Style is inspired by [@MindBranches on X](https://x.com/MindBranches) — clean, ink-on-paper, branches fanning right from a single root.
 
-Pipeline: `prose.txt` -> Claude tool-use -> `tree.json` -> geometry -> `output.svg` + `output.html` + `output.png`.
+![sample output](examples/sample-output.png)
 
-Reference: https://x.com/MindBranches
+The pipeline is small and self-contained:
+
+```
+prose.txt
+  -> LLM (Gemini by default)        # extract a structured tree
+  -> tree.json                      # hand-editable
+  -> pure-Python geometry           # branch positions, bezier curves
+  -> output.svg / output.html / output.png
+```
+
+You can use it as a CLI, or run a small local web portal that handles file upload, live progress, and downloads.
+
+---
 
 ## Install
 
+Requires Python 3.11+. Pick a folder, then:
+
 ```bash
+git clone https://github.com/jstwng/mindbranches.git
 cd mindbranches
-python -m venv .venv && source .venv/bin/activate
+
+python3.11 -m venv .venv
+source .venv/bin/activate
+
 pip install -e .
-playwright install chromium
-echo 'GEMINI_API_KEY=AIza...' > .env
+playwright install chromium       # one-time, used only for PNG screenshots
 ```
 
-## CLI
+That's it. The first time you run the tool, a config file is created at `~/.config/mindbranches/config.json`.
+
+---
+
+## Configure
+
+There are two ways to add an API key.
+
+**Easy (recommended): the portal.**
 
 ```bash
-mindbranches examples/sample-prose.txt --out ./out
+mindbranches-portal
+# opens http://127.0.0.1:8765
+```
+
+If no key is configured, the Settings modal opens automatically. Paste your key in the matching provider row and hit Save. It is written to `~/.config/mindbranches/config.json` (mode 0600) and never leaves your machine.
+
+**Direct: edit the config file.**
+
+```json
+{
+  "providers": {
+    "gemini": { "api_key": "AIza..." }
+  },
+  "models": [
+    { "id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash", "provider": "gemini", "default": true },
+    { "id": "gemini-2.5-pro",   "label": "Gemini 2.5 Pro",   "provider": "gemini" }
+  ],
+  "themes": [
+    { "id": "cream", "label": "Cream", "default": true },
+    { "id": "dark",  "label": "Dark"  },
+    { "id": "mono",  "label": "Mono"  }
+  ],
+  "defaults": { "width": 1600 }
+}
+```
+
+Add or remove models freely — the dropdown in the portal and the `--model` CLI choices follow the config. Ship a fork with whatever defaults make sense for you.
+
+If a `.env` file in your working tree (or any parent directory) holds `GEMINI_API_KEY=...`, it is auto-migrated into the config the first time `mindbranches` runs.
+
+---
+
+## Use it
+
+### Web portal
+
+```bash
+mindbranches-portal              # http://127.0.0.1:8765
+mindbranches-portal --port 9000  # custom port
+```
+
+What you do:
+
+1. Drop a `.txt` file onto the input row, click **Choose file**, or paste an absolute path.
+2. Pick theme / model / width (or leave defaults).
+3. Hit **Generate**.
+4. Watch the diagram build in the preview pane while the status trail ticks through each step.
+5. Download `tree.json`, `output.svg`, `output.html`, or `output.png`. The "open in new tab" link gives you the inline browser view.
+
+Each run writes its artifacts to `~/.cache/mindbranches/<job_id>/`.
+
+### CLI
+
+```bash
+mindbranches notes.txt
 mindbranches notes.txt --theme dark --root "The shape of attention"
-mindbranches tree.json --from-tree         # skip extraction, render hand-edited tree
+mindbranches notes.txt --model gemini-2.5-pro --width 2000 --out ./out
+
+mindbranches tree.json --from-tree     # render a hand-edited tree, no API call
 ```
 
 Flags:
 
-- `--out PATH` output directory (default `./out`)
-- `--root "..."` override the LLM-chosen root concept
-- `--width N` canvas width in px (default 1600)
-- `--theme cream|dark|mono` (default `cream`)
-- `--model flash|flash-lite` (default `flash` -- Gemini 2.5 Flash)
-- `--from-tree` interpret input as `tree.json`, skip the API call
+| Flag | Purpose |
+|------|---------|
+| `--out PATH` | Output directory (default `./out`) |
+| `--root "..."` | Override the LLM-chosen root concept |
+| `--width N` | Canvas width in pixels (default from config) |
+| `--theme cream\|dark\|mono` | Theme id (must exist in config) |
+| `--model <id>` | Model id (must exist in config) |
+| `--from-tree` | Treat the input file as `tree.json`, skip the LLM call |
 
-Outputs (in `--out`):
+`--theme` and `--model` choices come from your config, so adding a new model in settings makes it instantly available on the CLI.
 
-- `tree.json` -- hand-editable intermediate
-- `output.svg` -- canonical, self-contained (Inter font embedded as base64)
-- `output.html` -- browser preview
-- `output.png` -- 2x DPI screenshot for posting
+### Outputs
 
-## Web portal
+Every run produces:
 
-```bash
-mindbranches-portal              # http://127.0.0.1:8765
-mindbranches-portal --port 9000
+- `tree.json` — the hand-editable intermediate. Tweak it and re-run with `--from-tree`.
+- `output.svg` — canonical artifact. Inter font is base64-embedded so the file renders the same on any machine.
+- `output.html` — the SVG inside a minimal page wrapper, for browser preview.
+- `output.png` — Chromium screenshot at 2x DPI, ready to post.
+
+---
+
+## Adding a new model
+
+Open Settings -> **Add model** -> fill in id, label, provider -> Save. Or edit the config file directly — same shape. The portal dropdown and CLI choices update on the next run.
+
+## Adding a new provider
+
+Today only `gemini` is wired in `src/mindbranches/extract.py`. Adding `anthropic`, `openai`, or anything else means writing one function:
+
+```python
+def _extract_<provider>(prose, root_override, model_id, api_key) -> dict:
+    # call the SDK, return {"root": "...", "branches": [...]}
 ```
 
-Paste a filepath, pick theme/model/root, watch live status, download outputs.
+Then add a branch to `extract_tree`. PRs welcome.
+
+---
 
 ## Project layout
 
 ```
 src/mindbranches/
-  cli.py        # CLI entrypoint
-  server.py     # FastAPI portal + SSE
-  extract.py    # Claude tool-use, prose -> tree
-  layout.py     # geometry computation
-  render.py     # SVG / HTML / PNG rendering
-  templates/    # Jinja HTML wrapper
-  static/       # portal frontend
-  fonts/        # Inter TTFs (bundled, base64-embedded into SVG)
+  cli.py             # mindbranches CLI
+  server.py          # mindbranches-portal (FastAPI + SSE)
+  config.py          # ~/.config/mindbranches/config.json + .env migration
+  extract.py         # provider-aware tree extraction
+  layout.py          # geometry: rects, bezier curves, vertical packing
+  render.py          # SVG / HTML / PNG (Playwright at 2x DPI)
+  templates/         # Jinja HTML wrapper
+  static/            # portal frontend (vanilla HTML/CSS/JS)
+  fonts/             # Inter TTFs (bundled, base64-embedded into SVG)
 examples/
   sample-prose.txt
+  sample-output.{svg,png,json}
 docs/superpowers/specs/
   2026-04-22-mindbranches-design.md
 ```
+
+---
+
+## License
+
+MIT (see `LICENSE`).
+
+---
+
+made with care by [justin wang](https://jstwng.com) — jstwng.com
