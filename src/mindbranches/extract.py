@@ -14,16 +14,20 @@ from .config import get_model, provider_api_key
 
 SYSTEM_PROMPT_TEMPLATE = """You convert prose into a hierarchical mind-map structure for the MindBranches visual format.
 
-You will produce a tree of EXACTLY {layers} layers. Layer 1 is the root concept. The deepest layer (layer {layers}) is short leaf text. The intermediate layers are category labels.
+You will produce a tree of EXACTLY {layers} layers. Layer 1 is the root concept. The deepest layer (layer {layers}) carries the actual ideas. The intermediate layers are short category labels that group those ideas.
 
 Layer guide for this run (layers = {layers}):
 {layer_guide}
 
-Rules:
-- The root (layer 1) is 1-6 words.
-- Intermediate-layer labels are 1-4 words and read as parallel categories at their level.
-- Leaf entries (deepest layer) are 3-10 words each, concrete and punchy.
+Length guidance per layer:
+- Layer 1 (root): 1-6 words. A short title for the whole work.
+- Top intermediate layers (2..{layers_minus_one}): 1-4 words. They are pill labels that read as parallel categories.
+- Leaf layer ({layers}): 1-2 sentences (8-30 words). Each leaf is a real idea: a claim, a finding, a definition, a recommendation, a quoted insight. NOT a bullet-fragment. The leaves carry the substance of the source text.
+
+Other rules:
 - Every non-leaf node must have at least 2 children.
+- Sibling labels at any layer should be parallel in form and at the same level of abstraction.
+- Avoid redundancy across siblings.
 - Order siblings logically (chronological, hierarchical, or by importance).
 - If a root override is provided in the user message, use it verbatim.
 
@@ -116,6 +120,7 @@ def _system_prompt_for(layers: int) -> str:
     layers = max(2, min(5, layers))
     return SYSTEM_PROMPT_TEMPLATE.format(
         layers=layers,
+        layers_minus_one=layers - 1,
         layer_guide=LAYER_GUIDES[layers],
     )
 

@@ -142,7 +142,11 @@ def _run_pipeline(job: Job, req: ConvertRequest) -> None:
         html = render_html(svg, bg=layout.bg)
         (job.out_dir / "output.html").write_text(html)
 
-        _put_event(job, "preview_ready", {"bg": layout.bg})
+        _put_event(
+            job,
+            "preview_ready",
+            {"bg": layout.bg, "width": layout.width, "height": layout.height},
+        )
 
         _put_event(job, "screenshotting_png", {"estimate_seconds": 2})
         render_png_via_playwright(

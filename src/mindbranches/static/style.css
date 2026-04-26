@@ -373,6 +373,7 @@ h2 {
   border-radius: 6px;
   overflow: hidden;
   min-height: 320px;
+  max-height: 80vh;
   aspect-ratio: 16 / 9;
 }
 

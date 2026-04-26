@@ -1,91 +1,63 @@
 {
-  "root": "LLM Learning & Use",
+  "root": "LLM Learning Lifecycle",
   "layers": 3,
   "branches": [
     {
-      "label": "Pretraining Phase",
+      "label": "Pretraining",
       "children": [
         {
-          "label": "Model fed vast text corpora",
+          "label": "Models consume vast text corpora to predict the next token, learning the statistical patterns of human language.",
           "children": []
         },
         {
-          "label": "Predicts next token statistically",
-          "children": []
-        },
-        {
-          "label": "Learns surface texture of writing",
-          "children": []
-        },
-        {
-          "label": "Fluent, but lacks instruction following",
+          "label": "This phase enables fluent sentence completion but does not yet teach instruction following or task adherence.",
           "children": []
         }
       ]
     },
     {
-      "label": "Fine-tuning Phase",
+      "label": "Fine-tuning",
       "children": [
         {
-          "label": "Narrows model's behavior",
+          "label": "Engineers use curated examples of desired conversations for supervised training, often in large quantities.",
           "children": []
         },
         {
-          "label": "Uses curated conversation examples",
-          "children": []
-        },
-        {
-          "label": "Mimics desired tone and format",
-          "children": []
-        },
-        {
-          "label": "Becomes more like a chatbot",
+          "label": "The model learns to mimic specific tones, formats, and structures, transitioning from autocomplete to chatbot.",
           "children": []
         }
       ]
     },
     {
-      "label": "RLHF Phase",
+      "label": "RLHF",
       "children": [
         {
-          "label": "Humans rank model responses",
+          "label": "Humans rank model responses, and a reward model learns to predict these preferences.",
           "children": []
         },
         {
-          "label": "Reward model predicts rankings",
+          "label": "The language model is then optimized to maximize this reward, becoming helpful, honest, and harmless.",
           "children": []
         },
         {
-          "label": "Optimizes for helpful, honest, harmless",
-          "children": []
-        },
-        {
-          "label": "Introduces failure modes to debug",
+          "label": "RLHF can introduce issues like sycophancy or over-refusal, which researchers are actively addressing.",
           "children": []
         }
       ]
     },
     {
-      "label": "Inference Process",
+      "label": "Inference",
       "children": [
         {
-          "label": "User interacts with frozen model",
+          "label": "User interaction occurs with frozen model weights, sampling tokens one at a time from the distribution.",
           "children": []
         },
         {
-          "label": "Tokens sampled from distribution",
+          "label": "Decoding parameters control creativity and randomness, while the system prompt guides the model's behavior.",
           "children": []
         },
         {
-          "label": "Decoding parameters control creativity",
-          "children": []
-        },
-        {
-          "label": "System prompt steers behavior",
-          "children": []
-        },
-        {
-          "label": "Tool use and agents built on top",
+          "label": "Advanced features like tool use and agents operate on top of inference, without changing the core model.",
           "children": []
         }
       ]

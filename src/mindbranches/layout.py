@@ -1,13 +1,11 @@
 """Pure-Python geometry for the MindBranches diagram.
 
+Recursive horizontal fan: every level fans rightward from its parent.
+Each subtree gets a vertical extent equal to the sum of its descendants.
+Within that extent, the parent pill sits vertically centered against its
+children, and bezier connectors fan from parent-right to each child-left.
+
 Tree shape: every node is ``{label, children?}``. Leaves have no children.
-Layout strategy:
-- Root sits at center-left, anchored vertically to the middle of the canvas.
-- Top-level branches stack vertically on the right, each connected to the
-  root by a bezier.
-- Inside each top-level branch, sub-content stacks vertically and is
-  indented with each depth step. Non-leaf descendants render as smaller
-  pills; the deepest layer renders as plain text.
 """
 
 from __future__ import annotations
@@ -52,23 +50,23 @@ THEMES: dict[str, dict] = {
     },
 }
 
-# Typography per depth (depth 1 = root, depth 2 = top-level branches, ...).
-ROOT_FONT_SIZE = 30
-PILL_FONT_BY_DEPTH = {2: 20, 3: 16, 4: 14, 5: 13}
-PILL_PAD_Y_BY_DEPTH = {2: 10, 3: 8, 4: 7, 5: 6}
-PILL_PAD_X_BY_DEPTH = {2: 18, 3: 14, 4: 12, 5: 10}
-LEAF_FONT_SIZE = 15
+# One column per layer. Index 1 = root, 2 = first ring, etc.
+# Non-leaf columns hold short pill labels. The leaf column gets extra width
+# because leaves carry full ideas (sentences), not bullet fragments.
+COLUMN_WIDTHS: dict[int, int] = {1: 320, 2: 260, 3: 240, 4: 230, 5: 220}
+LEAF_COLUMN_WIDTH = 340
+
+PILL_FONT_BY_DEPTH = {1: 30, 2: 20, 3: 17, 4: 15, 5: 14}
+PILL_PAD_Y_BY_DEPTH = {1: 18, 2: 12, 3: 10, 4: 9, 5: 8}
+PILL_PAD_X_BY_DEPTH = {1: 22, 2: 18, 3: 14, 4: 12, 5: 11}
+
+LEAF_FONT_SIZE = 14
 LEAF_LINE_HEIGHT = 1.55
+LEAF_BLOCK_PAD = 8  # extra vertical breathing room for leaf blocks
 
 PADDING = 80
-ROOT_WIDTH = 320
-ROOT_PAD_X = 22
-ROOT_PAD_Y = 18
-ROOT_TO_BRANCH_GAP = 220
-INTER_BRANCH_GAP = 32
-PILL_TO_CHILDREN_GAP = 10
-INTER_CHILD_GAP = 8
-INDENT_PER_DEPTH = 22
+INTER_COLUMN_GAP = 90
+INTER_SUBTREE_GAP = 24  # between sibling subtrees vertically
 
 
 @dataclass
@@ -113,6 +111,8 @@ class Layout:
     paths: list[BezierPath] = field(default_factory=list)
 
 
+# ------------------------- text helpers -------------------------
+
 def _approx_text_width(text: str, font_size: int, weight: int = 400) -> float:
     factor = 0.55 if weight < 500 else (0.58 if weight < 700 else 0.60)
     return len(text) * font_size * factor
@@ -134,47 +134,82 @@ def _wrap_text(text: str, max_width: float, font_size: int, weight: int = 400) -
     return lines or [text]
 
 
-def _measure_subtree(
-    node: dict[str, Any],
-    depth: int,
-    available_w: float,
-) -> float:
-    """Return the total height a node + its descendants will occupy."""
-    if is_leaf(node):
-        lines = _wrap_text(node["label"], available_w, LEAF_FONT_SIZE)
-        return len(lines) * LEAF_FONT_SIZE * LEAF_LINE_HEIGHT
+def _column_width(depth: int, total_layers: int | None = None) -> int:
+    """Width of the column at this depth.
 
-    pill_font = PILL_FONT_BY_DEPTH.get(depth, PILL_FONT_BY_DEPTH[5])
-    pill_pad_y = PILL_PAD_Y_BY_DEPTH.get(depth, PILL_PAD_Y_BY_DEPTH[5])
-    pill_pad_x = PILL_PAD_X_BY_DEPTH.get(depth, PILL_PAD_X_BY_DEPTH[5])
-    pill_inner_w = available_w - 2 * pill_pad_x
-    pill_lines = _wrap_text(node["label"], pill_inner_w, pill_font, weight=500)
-    pill_h = len(pill_lines) * pill_font * 1.2 + 2 * pill_pad_y
+    The leaf column (depth == total_layers) gets extra width so substantive
+    leaf text reads as paragraphs, not as cramped wrapped fragments.
+    """
+    if total_layers is not None and depth == total_layers:
+        return LEAF_COLUMN_WIDTH
+    return COLUMN_WIDTHS.get(depth, COLUMN_WIDTHS[5])
 
-    indent = INDENT_PER_DEPTH
-    child_w = available_w - indent
-    children = node.get("children", [])
+
+def _pill_metrics(
+    node: dict[str, Any], depth: int, total_layers: int | None = None
+) -> tuple[list[str], int, int]:
+    col = _column_width(depth, total_layers)
+    font = PILL_FONT_BY_DEPTH.get(depth, PILL_FONT_BY_DEPTH[5])
+    pad_x = PILL_PAD_X_BY_DEPTH.get(depth, PILL_PAD_X_BY_DEPTH[5])
+    pad_y = PILL_PAD_Y_BY_DEPTH.get(depth, PILL_PAD_Y_BY_DEPTH[5])
+    weight = 700 if depth == 1 else 500
+    lines = _wrap_text(node.get("label", ""), col - 2 * pad_x, font, weight=weight)
+    pill_h = len(lines) * font * 1.2 + 2 * pad_y
+    return lines, font, pill_h
+
+
+def _leaf_metrics(
+    node: dict[str, Any], depth: int, total_layers: int | None = None
+) -> tuple[list[str], int]:
+    """Return the wrapped lines and total block height for a leaf at this depth."""
+    col = _column_width(depth, total_layers)
+    lines = _wrap_text(node.get("label", ""), col, LEAF_FONT_SIZE)
+    h = int(len(lines) * LEAF_FONT_SIZE * LEAF_LINE_HEIGHT) + LEAF_BLOCK_PAD
+    return lines, h
+
+
+# ------------------------- measurement -------------------------
+
+def _measure(node: dict[str, Any], depth: int, total_layers: int) -> int:
+    """Return the vertical height this subtree wants."""
+    if is_leaf(node) or depth == total_layers:
+        _, h = _leaf_metrics(node, depth, total_layers)
+        return h
+
+    _, _, pill_h = _pill_metrics(node, depth, total_layers)
+    children = node.get("children", []) or []
     if not children:
         return pill_h
-    children_h = sum(_measure_subtree(c, depth + 1, child_w) for c in children)
-    children_h += INTER_CHILD_GAP * max(0, len(children) - 1)
-    return pill_h + PILL_TO_CHILDREN_GAP + children_h
+    children_total = sum(_measure(c, depth + 1, total_layers) for c in children)
+    children_total += INTER_SUBTREE_GAP * max(0, len(children) - 1)
+    return max(pill_h, children_total)
 
 
-def _emit_subtree(
+# ------------------------- emission -------------------------
+
+def _emit(
     layout: Layout,
     node: dict[str, Any],
     depth: int,
+    total_layers: int,
     x: float,
-    y: float,
-    available_w: float,
+    y_top: float,
+    allocated_h: float,
     accent: str,
     palette: dict,
-) -> float:
-    """Place a node + descendants starting at (x, y). Return consumed height."""
-    if is_leaf(node):
-        lines = _wrap_text(node["label"], available_w, LEAF_FONT_SIZE)
-        cursor = y
+) -> tuple[float, float, float]:
+    """Place a subtree starting at (x, y_top) with vertical space allocated_h.
+
+    Returns (anchor_left_x, anchor_mid_y, anchor_right_x) -- the points the
+    parent's bezier should aim for and that the children's beziers come from.
+    """
+    col = _column_width(depth, total_layers)
+
+    # Leaf: render as plain text, vertically centered within the allocation.
+    if is_leaf(node) or depth == total_layers:
+        lines, _ = _leaf_metrics(node, depth, total_layers)
+        block_h = len(lines) * LEAF_FONT_SIZE * LEAF_LINE_HEIGHT
+        cursor = y_top + (allocated_h - block_h) / 2
         for line in lines:
             layout.texts.append(
                 TextLine(
@@ -188,168 +223,191 @@ def _emit_subtree(
                 )
             )
             cursor += LEAF_FONT_SIZE * LEAF_LINE_HEIGHT
-        return cursor - y
+        # Anchor on the left edge of the text block, vertically centered.
+        return x, y_top + allocated_h / 2, x + col
 
-    pill_font = PILL_FONT_BY_DEPTH.get(depth, PILL_FONT_BY_DEPTH[5])
-    pill_pad_y = PILL_PAD_Y_BY_DEPTH.get(depth, PILL_PAD_Y_BY_DEPTH[5])
-    pill_pad_x = PILL_PAD_X_BY_DEPTH.get(depth, PILL_PAD_X_BY_DEPTH[5])
-    pill_inner_w = available_w - 2 * pill_pad_x
-    pill_lines = _wrap_text(node["label"], pill_inner_w, pill_font, weight=500)
-    pill_h = len(pill_lines) * pill_font * 1.2 + 2 * pill_pad_y
+    # Non-leaf: pill at this column, centered vertically inside allocation.
+    pill_lines, pill_font, pill_h = _pill_metrics(node, depth, total_layers)
+    pad_x = PILL_PAD_X_BY_DEPTH.get(depth, PILL_PAD_X_BY_DEPTH[5])
+    pad_y = PILL_PAD_Y_BY_DEPTH.get(depth, PILL_PAD_Y_BY_DEPTH[5])
+    pill_y = y_top + (allocated_h - pill_h) / 2
 
-    # Top-level branches (depth 2) get the solid accent fill; deeper non-leaf
-    # pills get an outline-only treatment so the hierarchy reads at a glance.
-    if depth == 2:
+    if depth == 1:
+        # Root: filled dark
         layout.rects.append(
-            Rect(
-                x=x, y=y, w=available_w, h=pill_h,
-                fill=accent, stroke=accent, radius=10,
-            )
+            Rect(x=x, y=pill_y, w=col, h=pill_h, fill=palette["ink"], radius=14)
         )
         label_color = palette["bg"]
+        text_anchor = "middle"
+    elif depth == 2:
+        # Top-level branches: filled accent
+        layout.rects.append(
+            Rect(x=x, y=pill_y, w=col, h=pill_h, fill=accent, radius=10)
+        )
+        label_color = palette["bg"]
+        text_anchor = "start"
     else:
+        # Deeper non-leaf: outline-only pill
         layout.rects.append(
             Rect(
-                x=x, y=y, w=available_w, h=pill_h,
+                x=x, y=pill_y, w=col, h=pill_h,
                 fill="transparent", stroke=accent, stroke_width=1, radius=8,
             )
         )
         label_color = accent
+        text_anchor = "start"
 
-    # Pill label (left-aligned inside the pill, supports wrapping)
-    label_y = y + pill_pad_y
+    # Pill label
+    label_y = pill_y + pad_y
+    if text_anchor == "middle":
+        label_x = x + col / 2
+    else:
+        label_x = x + pad_x
     for line in pill_lines:
         layout.texts.append(
             TextLine(
                 text=line,
-                x=x + pill_pad_x,
+                x=label_x,
                 y=label_y,
                 font_size=pill_font,
-                weight=500,
+                weight=700 if depth == 1 else 500,
                 color=label_color,
+                anchor=text_anchor,
                 line_height=1.2,
             )
         )
         label_y += pill_font * 1.2
 
-    # Children stacked below, indented
-    indent = INDENT_PER_DEPTH
-    child_x = x + indent
-    child_w = available_w - indent
-    cursor = y + pill_h + PILL_TO_CHILDREN_GAP
-    children = node.get("children", [])
-    for i, child in enumerate(children):
-        used = _emit_subtree(layout, child, depth + 1, child_x, cursor, child_w, accent, palette)
-        cursor += used
-        if i < len(children) - 1:
-            cursor += INTER_CHILD_GAP
+    # Place children to the right, centered vertically against this pill.
+    children = node.get("children", []) or []
+    if not children:
+        return x, pill_y + pill_h / 2, x + col
 
-    return cursor - y
+    child_heights = [_measure(c, depth + 1, total_layers) for c in children]
+    children_total = sum(child_heights) + INTER_SUBTREE_GAP * max(0, len(children) - 1)
+    children_top = y_top + (allocated_h - children_total) / 2
 
+    parent_right_x = x + col
+    parent_mid_y = pill_y + pill_h / 2
+
+    cursor = children_top
+    for c, ch in zip(children, child_heights):
+        child_x = x + col + INTER_COLUMN_GAP
+        child_left_x, child_mid_y, _ = _emit(
+            layout, c, depth + 1, total_layers,
+            child_x, cursor, ch, accent, palette,
+        )
+        # Bezier connector
+        gap = child_left_x - parent_right_x
+        c1x = parent_right_x + gap / 2
+        c2x = parent_right_x + gap / 2
+        d = (
+            f"M {parent_right_x:.1f} {parent_mid_y:.1f} "
+            f"C {c1x:.1f} {parent_mid_y:.1f}, "
+            f"{c2x:.1f} {child_mid_y:.1f}, "
+            f"{child_left_x:.1f} {child_mid_y:.1f}"
+        )
+        layout.paths.append(BezierPath(d=d, stroke=accent, width=2))
+
+        cursor += ch + INTER_SUBTREE_GAP
+
+    return x, parent_mid_y, parent_right_x
+
+
+# ------------------------- top-level -------------------------
 
 def compute_layout(tree: dict[str, Any], width: int = 1600, theme: str = "cream") -> Layout:
     palette = THEMES.get(theme, THEMES["cream"])
     accents = palette["accents"]
-    bg = palette["bg"]
-    ink = palette["ink"]
 
-    branches = tree.get("branches", [])
-    if not branches:
-        # Degenerate: just the root.
-        h = ROOT_PAD_Y * 2 + ROOT_FONT_SIZE * 1.2 + PADDING * 2
-        return Layout(width=width, height=int(h), bg=bg, ink=ink)
+    layers_decl = tree.get("layers")
+    measured = tree_depth(tree.get("branches", [])) if tree.get("branches") else 1
+    total_layers = max(2, layers_decl or measured)
 
-    # Root geometry
-    root_lines = _wrap_text(
-        tree.get("root", ""), ROOT_WIDTH - 2 * ROOT_PAD_X, ROOT_FONT_SIZE, weight=700
+    branches = tree.get("branches", []) or []
+
+    # Canvas width is determined by the deepest branch -- sum column widths +
+    # gaps + padding. Width param is treated as a minimum.
+    cols_used = list(range(1, total_layers + 1))
+    canvas_w = (
+        sum(_column_width(d, total_layers) for d in cols_used)
+        + INTER_COLUMN_GAP * (len(cols_used) - 1)
+        + 2 * PADDING
     )
-    root_text_h = len(root_lines) * ROOT_FONT_SIZE * 1.2
-    root_h = root_text_h + 2 * ROOT_PAD_Y
+    canvas_w = max(canvas_w, width)
 
-    branch_x = PADDING + ROOT_WIDTH + ROOT_TO_BRANCH_GAP
-    branch_w = width - branch_x - PADDING
+    if not branches:
+        # Just the root.
+        _, _, pill_h = _pill_metrics({"label": tree.get("root", "")}, depth=1)
+        h = int(pill_h + 2 * PADDING)
+        layout = Layout(width=canvas_w, height=h, bg=palette["bg"], ink=palette["ink"])
+        _emit(
+            layout, {"label": tree.get("root", "")}, 1, total_layers,
+            PADDING, PADDING, pill_h, accents[0], palette,
+        )
+        return layout
 
-    # Measure each top-level branch first so we can size + center the canvas.
-    branch_heights = [
-        _measure_subtree(b, depth=2, available_w=branch_w) for b in branches
-    ]
-    total_branch_h = sum(branch_heights) + INTER_BRANCH_GAP * max(0, len(branches) - 1)
-    content_h = max(root_h, total_branch_h)
+    # Treat the root as a node whose children are the top-level branches.
+    # Measure the per-branch heights directly (each gets its own accent color
+    # for downstream descendants).
+    branch_heights = [_measure(b, 2, total_layers) for b in branches]
+    branches_total = sum(branch_heights) + INTER_SUBTREE_GAP * max(0, len(branches) - 1)
+
+    _, _, root_pill_h = _pill_metrics({"label": tree.get("root", "")}, depth=1)
+    content_h = max(branches_total, root_pill_h)
     canvas_h = int(content_h + 2 * PADDING)
 
-    layout = Layout(width=width, height=canvas_h, bg=bg, ink=ink)
+    layout = Layout(width=canvas_w, height=canvas_h, bg=palette["bg"], ink=palette["ink"])
 
-    # Root rect + label (ink fill, bg-color text)
-    root_y = (canvas_h - root_h) / 2
+    # Place root pill (filled dark) at column 1, centered vertically.
+    root_lines, root_font, _ = _pill_metrics({"label": tree.get("root", "")}, depth=1)
+    root_w = COLUMN_WIDTHS[1]
+    root_pad_y = PILL_PAD_Y_BY_DEPTH[1]
+    root_y = PADDING + (content_h - root_pill_h) / 2
     layout.rects.append(
-        Rect(
-            x=PADDING, y=root_y, w=ROOT_WIDTH, h=root_h,
-            fill=ink, stroke=ink, radius=14,
-        )
+        Rect(x=PADDING, y=root_y, w=root_w, h=root_pill_h, fill=palette["ink"], radius=14)
     )
-    # Root label centered
-    n = len(root_lines)
-    total_text_h = n * ROOT_FONT_SIZE * 1.2
-    start_y = root_y + (root_h - total_text_h) / 2
-    cx = PADDING + ROOT_WIDTH / 2
-    cursor_y = start_y
+    label_y = root_y + root_pad_y
+    cx = PADDING + root_w / 2
     for line in root_lines:
         layout.texts.append(
             TextLine(
                 text=line,
                 x=cx,
-                y=cursor_y,
-                font_size=ROOT_FONT_SIZE,
+                y=label_y,
+                font_size=root_font,
                 weight=700,
-                color=bg,
+                color=palette["bg"],
                 anchor="middle",
                 line_height=1.2,
             )
         )
-        cursor_y += ROOT_FONT_SIZE * 1.2
+        label_y += root_font * 1.2
 
-    # Top-level branches: centered as a stack against the root
-    branches_top = (canvas_h - total_branch_h) / 2
-    cursor_y = branches_top
-    root_right_edge = (PADDING + ROOT_WIDTH, root_y + root_h / 2)
+    # Place each top-level branch in column 2, with its own accent.
+    branches_top = PADDING + (content_h - branches_total) / 2
+    cursor = branches_top
+    branch_x = PADDING + root_w + INTER_COLUMN_GAP
+    root_right_x = PADDING + root_w
+    root_mid_y = root_y + root_pill_h / 2
 
     for i, (branch, h) in enumerate(zip(branches, branch_heights)):
         accent = accents[i % len(accents)]
-
-        # Bezier from root edge to this branch's top pill (or first leaf)
-        # We anchor to the vertical mid of the FIRST node's pill / leaf.
-        pill_font = PILL_FONT_BY_DEPTH.get(2, 20)
-        pill_pad_y = PILL_PAD_Y_BY_DEPTH.get(2, 10)
-        pill_pad_x = PILL_PAD_X_BY_DEPTH.get(2, 18)
-        if is_leaf(branch):
-            anchor_h = LEAF_FONT_SIZE * LEAF_LINE_HEIGHT
-        else:
-            pill_lines = _wrap_text(
-                branch["label"],
-                branch_w - 2 * pill_pad_x,
-                pill_font,
-                weight=500,
-            )
-            anchor_h = len(pill_lines) * pill_font * 1.2 + 2 * pill_pad_y
-        anchor_mid_y = cursor_y + anchor_h / 2
-
-        rx, ry = root_right_edge
-        gap = branch_x - rx
-        c1x = rx + gap / 2
-        c2x = rx + gap / 2
+        child_left_x, child_mid_y, _ = _emit(
+            layout, branch, 2, total_layers,
+            branch_x, cursor, h, accent, palette,
+        )
+        # Bezier from root edge to branch
+        gap = child_left_x - root_right_x
+        c1x = root_right_x + gap / 2
+        c2x = root_right_x + gap / 2
         d = (
-            f"M {rx:.1f} {ry:.1f} "
-            f"C {c1x:.1f} {ry:.1f}, {c2x:.1f} {anchor_mid_y:.1f}, "
-            f"{branch_x:.1f} {anchor_mid_y:.1f}"
+            f"M {root_right_x:.1f} {root_mid_y:.1f} "
+            f"C {c1x:.1f} {root_mid_y:.1f}, "
+            f"{c2x:.1f} {child_mid_y:.1f}, "
+            f"{child_left_x:.1f} {child_mid_y:.1f}"
         )
         layout.paths.append(BezierPath(d=d, stroke=accent, width=2))
-
-        _emit_subtree(layout, branch, depth=2, x=branch_x, y=cursor_y, available_w=branch_w, accent=accent, palette=palette)
-        cursor_y += h + INTER_BRANCH_GAP
+        cursor += h + INTER_SUBTREE_GAP
 
     return layout
-
-
-# Backwards-compatible attribute names a few callers used to peek at:
-def make_layout(*args, **kwargs):  # pragma: no cover
-    return compute_layout(*args, **kwargs)

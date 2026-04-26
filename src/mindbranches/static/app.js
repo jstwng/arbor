@@ -431,6 +431,10 @@ function handleEvent(evt, e, jobId, es) {
   else if (evt === "computing_layout") overlayLabel.textContent = "Computing layout...";
   else if (evt === "rendering_svg") overlayLabel.textContent = "Rendering SVG...";
   else if (evt === "preview_ready") {
+    if (data.width && data.height) {
+      const previewFrame = document.getElementById("preview-frame");
+      previewFrame.style.aspectRatio = `${data.width} / ${data.height}`;
+    }
     previewIframe.src = `/preview/${jobId}/output.html`;
     previewIframe.addEventListener("load", () => {
       previewOverlay.classList.add("hidden");

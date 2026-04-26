@@ -5,8 +5,19 @@
 <title>MindBranches</title>
 <style>
   html, body { margin: 0; padding: 0; background: {{ bg }}; }
-  body { display: block; }
-  svg { display: block; width: 100%; height: auto; }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  svg {
+    display: block;
+    max-width: 100%;
+    max-height: 100vh;
+    width: auto;
+    height: auto;
+  }
 </style>
 </head>
 <body>
