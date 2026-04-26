@@ -50,5 +50,23 @@ class GeminiPlugin:
         api_key: str,
         temperature: float = 0.3,
     ) -> Iterator[str]:
-        # Phase 1 fallback: synchronous wrapper. Phase 3 replaces this with real streaming.
-        yield self.extract(prompt, system, schema, model_id, api_key, temperature)
+        if not api_key:
+            raise RuntimeError(
+                "Gemini API key not configured. Open the portal settings (gear icon) "
+                "or edit ~/.config/arbor/config.json."
+            )
+        client = genai.Client(api_key=api_key)
+        config = types.GenerateContentConfig(
+            system_instruction=system,
+            response_mime_type="application/json",
+            response_schema=schema,
+            temperature=temperature,
+        )
+        for chunk in client.models.generate_content_stream(
+            model=model_id,
+            contents=prompt,
+            config=config,
+        ):
+            text = getattr(chunk, "text", None)
+            if text:
+                yield text
