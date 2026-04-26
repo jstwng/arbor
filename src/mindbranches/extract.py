@@ -22,7 +22,7 @@ Layer guide for this run (layers = {layers}):
 Length guidance per layer:
 - Layer 1 (root): 1-6 words. A short title for the whole work.
 - Top intermediate layers (2..{layers_minus_one}): 1-4 words. They are pill labels that read as parallel categories.
-- Leaf layer ({layers}): 1-2 sentences (8-30 words). Each leaf is a real idea: a claim, a finding, a definition, a recommendation, a quoted insight. NOT a bullet-fragment. The leaves carry the substance of the source text.
+- Leaf layer ({layers}): one tight clause or short sentence (6-16 words). Concrete and specific -- a claim, finding, definition, or recommendation -- not a bullet fragment, but also not a paragraph. Aim for ideas dense enough to stand alone on a slide.
 
 Other rules:
 - Every non-leaf node must have at least 2 children.

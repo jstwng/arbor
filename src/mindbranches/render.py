@@ -110,7 +110,7 @@ def render_png_via_playwright(
         browser = p.chromium.launch()
         page = browser.new_page(
             viewport={"width": viewport_width, "height": viewport_height},
-            device_scale_factor=2,
+            device_scale_factor=3,
         )
         page.goto(html_path.absolute().as_uri())
         page.wait_for_load_state("networkidle")

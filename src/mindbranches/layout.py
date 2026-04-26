@@ -51,22 +51,22 @@ THEMES: dict[str, dict] = {
 }
 
 # One column per layer. Index 1 = root, 2 = first ring, etc.
-# Non-leaf columns hold short pill labels. The leaf column gets extra width
-# because leaves carry full ideas (sentences), not bullet fragments.
-COLUMN_WIDTHS: dict[int, int] = {1: 320, 2: 260, 3: 240, 4: 230, 5: 220}
-LEAF_COLUMN_WIDTH = 340
+# Non-leaf columns hold short pill labels. The leaf column is wider because
+# leaves carry full clause-length ideas, not just one-word fragments.
+COLUMN_WIDTHS: dict[int, int] = {1: 380, 2: 320, 3: 290, 4: 270, 5: 260}
+LEAF_COLUMN_WIDTH = 460
 
-PILL_FONT_BY_DEPTH = {1: 30, 2: 20, 3: 17, 4: 15, 5: 14}
-PILL_PAD_Y_BY_DEPTH = {1: 18, 2: 12, 3: 10, 4: 9, 5: 8}
-PILL_PAD_X_BY_DEPTH = {1: 22, 2: 18, 3: 14, 4: 12, 5: 11}
+PILL_FONT_BY_DEPTH = {1: 38, 2: 26, 3: 22, 4: 19, 5: 17}
+PILL_PAD_Y_BY_DEPTH = {1: 22, 2: 14, 3: 12, 4: 11, 5: 10}
+PILL_PAD_X_BY_DEPTH = {1: 26, 2: 20, 3: 16, 4: 14, 5: 13}
 
-LEAF_FONT_SIZE = 14
-LEAF_LINE_HEIGHT = 1.55
-LEAF_BLOCK_PAD = 8  # extra vertical breathing room for leaf blocks
+LEAF_FONT_SIZE = 17
+LEAF_LINE_HEIGHT = 1.5
+LEAF_BLOCK_PAD = 10
 
-PADDING = 80
-INTER_COLUMN_GAP = 90
-INTER_SUBTREE_GAP = 24  # between sibling subtrees vertically
+PADDING = 100
+INTER_COLUMN_GAP = 110
+INTER_SUBTREE_GAP = 28
 
 
 @dataclass

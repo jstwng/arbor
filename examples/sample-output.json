@@ -1,17 +1,39 @@
 {
-  "root": "LLM Learning Lifecycle",
-  "layers": 3,
+  "root": "How LLMs Learn to Be Useful",
+  "layers": 4,
   "branches": [
     {
       "label": "Pretraining",
       "children": [
         {
-          "label": "Models consume vast text corpora to predict the next token, learning the statistical patterns of human language.",
-          "children": []
+          "label": "Initial Process",
+          "children": [
+            {
+              "label": "Model consumes vast corpora: web text, books, code, conversations.",
+              "children": []
+            },
+            {
+              "label": "Primary task is to predict the next token in the sequence.",
+              "children": []
+            },
+            {
+              "label": "Relies on brute-force statistical learning of language patterns.",
+              "children": []
+            }
+          ]
         },
         {
-          "label": "This phase enables fluent sentence completion but does not yet teach instruction following or task adherence.",
-          "children": []
+          "label": "Early Capabilities",
+          "children": [
+            {
+              "label": "Model achieves fluent sentence completion abilities.",
+              "children": []
+            },
+            {
+              "label": "Lacks instruction following, harm refusal, or task adherence.",
+              "children": []
+            }
+          ]
         }
       ]
     },
@@ -19,12 +41,30 @@
       "label": "Fine-tuning",
       "children": [
         {
-          "label": "Engineers use curated examples of desired conversations for supervised training, often in large quantities.",
-          "children": []
+          "label": "Supervised Method",
+          "children": [
+            {
+              "label": "Engineers collect curated examples of desired conversations.",
+              "children": []
+            },
+            {
+              "label": "Supervised training is conducted on thousands or millions of examples.",
+              "children": []
+            }
+          ]
         },
         {
-          "label": "The model learns to mimic specific tones, formats, and structures, transitioning from autocomplete to chatbot.",
-          "children": []
+          "label": "Behavioral Shift",
+          "children": [
+            {
+              "label": "Model learns to mimic specific tone, format, and structural elements.",
+              "children": []
+            },
+            {
+              "label": "Transforms the model into a chatbot-like experience.",
+              "children": []
+            }
+          ]
         }
       ]
     },
@@ -32,16 +72,38 @@
       "label": "RLHF",
       "children": [
         {
-          "label": "Humans rank model responses, and a reward model learns to predict these preferences.",
-          "children": []
+          "label": "Feedback Loop",
+          "children": [
+            {
+              "label": "Humans rank multiple model responses to a single prompt.",
+              "children": []
+            },
+            {
+              "label": "A reward model is trained to predict these human rankings.",
+              "children": []
+            },
+            {
+              "label": "The language model is then optimized to maximize the predicted reward.",
+              "children": []
+            }
+          ]
         },
         {
-          "label": "The language model is then optimized to maximize this reward, becoming helpful, honest, and harmless.",
-          "children": []
-        },
-        {
-          "label": "RLHF can introduce issues like sycophancy or over-refusal, which researchers are actively addressing.",
-          "children": []
+          "label": "Outcomes & Challenges",
+          "children": [
+            {
+              "label": "Makes the model helpful, honest, and harmless in practical use.",
+              "children": []
+            },
+            {
+              "label": "Introduces failure modes like sycophancy and mode collapse.",
+              "children": []
+            },
+            {
+              "label": "Can lead to over-refusal, which researchers are actively debugging.",
+              "children": []
+            }
+          ]
         }
       ]
     },
@@ -49,16 +111,34 @@
       "label": "Inference",
       "children": [
         {
-          "label": "User interaction occurs with frozen model weights, sampling tokens one at a time from the distribution.",
-          "children": []
+          "label": "Runtime Operation",
+          "children": [
+            {
+              "label": "Model weights are frozen; tokens sampled one at a time.",
+              "children": []
+            },
+            {
+              "label": "Sampling occurs from the model's predicted token distribution.",
+              "children": []
+            }
+          ]
         },
         {
-          "label": "Decoding parameters control creativity and randomness, while the system prompt guides the model's behavior.",
-          "children": []
-        },
-        {
-          "label": "Advanced features like tool use and agents operate on top of inference, without changing the core model.",
-          "children": []
+          "label": "Behavioral Control",
+          "children": [
+            {
+              "label": "Decoding parameters (temperature, top-p) manage creativity and randomness.",
+              "children": []
+            },
+            {
+              "label": "The system prompt effectively steers the model's behavior.",
+              "children": []
+            },
+            {
+              "label": "Tool use, retrieval, and agents operate on top of the frozen model.",
+              "children": []
+            }
+          ]
         }
       ]
     }
