@@ -25,9 +25,15 @@ from .config import (
     save_config,
 )
 from .depth import clamp_layers, normalize_tree, suggest_layers
-from .extract import extract_tree
-from .layout import compute_layout
-from .render import render_html, render_png_via_playwright, render_svg
+from .layout import compute_layout, layout_to_snapshot
+from .pipeline import extract_tree_stream
+from .pipeline.events import (
+    BranchPartial,
+    ExtractionStarted,
+    TreeComplete,
+    ValidationRetry,
+)
+from .render import render_html, render_live_skeleton, render_png_via_playwright, render_svg
 
 PKG_ROOT = Path(__file__).parent
 STATIC_DIR = PKG_ROOT / "static"
@@ -120,13 +126,56 @@ def _run_pipeline(job: Job, req: ConvertRequest) -> None:
         layers = clamp_layers(req.layers, suggest_layers(len(prose.encode("utf-8"))))
 
         _put_event(job, "extracting_tree", {"model": model, "layers": layers})
-        tree = extract_tree(
+
+        tree: dict | None = None
+        for evt in extract_tree_stream(
             prose,
             root_override=req.root,
             model_id=model,
             config=APP_CONFIG,
             layers=layers,
-        )
+        ):
+            if isinstance(evt, ExtractionStarted):
+                skel_w = width
+                skel_h = max(800, int(width * 0.6))
+                skel_bg = "#FBF7F0"
+                (job.out_dir / "live.html").write_text(
+                    render_live_skeleton(
+                        width=skel_w, height=skel_h, bg=skel_bg, job_id=job.job_id
+                    )
+                )
+                _put_event(
+                    job,
+                    "preview_ready",
+                    {
+                        "url": f"/preview/{job.job_id}/live.html",
+                        "bg": skel_bg,
+                        "width": skel_w,
+                        "height": skel_h,
+                    },
+                )
+            elif isinstance(evt, BranchPartial):
+                try:
+                    layout_partial = compute_layout(
+                        evt.cumulative_tree, width=width, theme=theme
+                    )
+                    snap = layout_to_snapshot(layout_partial)
+                    _put_event(job, "branch_partial", snap)
+                except Exception:
+                    pass  # tolerate transient bad shapes mid-stream
+            elif isinstance(evt, ValidationRetry):
+                _put_event(job, "validation_retry", {"reason": evt.reason})
+            elif isinstance(evt, TreeComplete):
+                tree = evt.tree
+
+        if tree is None:
+            _put_event(
+                job,
+                "error",
+                {"step": "extracting_tree", "message": "Pipeline ended without a tree."},
+            )
+            return
+
         tree = normalize_tree(tree)
         _put_event(job, "tree_ready", {"tree": tree})
 
@@ -142,10 +191,11 @@ def _run_pipeline(job: Job, req: ConvertRequest) -> None:
         html = render_html(svg, bg=layout.bg)
         (job.out_dir / "output.html").write_text(html)
 
+        # Tell the live iframe to swap to the canonical static page.
         _put_event(
             job,
-            "preview_ready",
-            {"bg": layout.bg, "width": layout.width, "height": layout.height},
+            "tree_complete",
+            {"preview_url": f"/preview/{job.job_id}/output.html"},
         )
 
         _put_event(job, "screenshotting_png", {"estimate_seconds": 2})
@@ -291,12 +341,14 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Not yet ready: {filename}")
         return FileResponse(path, filename=filename)
 
-    @app.get("/preview/{job_id}/output.html")
-    async def preview(job_id: str) -> FileResponse:
+    @app.get("/preview/{job_id}/{filename}")
+    async def preview(job_id: str, filename: str) -> FileResponse:
+        if filename not in ("output.html", "live.html"):
+            raise HTTPException(status_code=404)
         job = JOBS.get(job_id)
         if not job:
             raise HTTPException(status_code=404)
-        path = job.out_dir / "output.html"
+        path = job.out_dir / filename
         if not path.exists():
             raise HTTPException(status_code=404)
         return FileResponse(path, media_type="text/html")

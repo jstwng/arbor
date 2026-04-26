@@ -411,3 +411,60 @@ def compute_layout(tree: dict[str, Any], width: int = 1600, theme: str = "cream"
         cursor += h + INTER_SUBTREE_GAP
 
     return layout
+
+
+def layout_to_snapshot(layout: "Layout") -> dict:
+    """Convert a Layout to a JSON-friendly snapshot for the live iframe.
+
+    Mirrors render_svg's element ordering: paths under everything, then rects,
+    then text on top.
+    """
+    elements: list[dict] = []
+    for i, p in enumerate(layout.paths):
+        elements.append({
+            "id": f"p{i}",
+            "tag": "path",
+            "attrs": {
+                "d": p.d,
+                "stroke": p.stroke,
+                "stroke-width": str(p.width),
+                "fill": "none",
+                "stroke-linecap": "round",
+            },
+            "text": None,
+        })
+    for i, r in enumerate(layout.rects):
+        attrs = {
+            "x": f"{r.x:.1f}",
+            "y": f"{r.y:.1f}",
+            "width": f"{r.w:.1f}",
+            "height": f"{r.h:.1f}",
+            "rx": str(r.radius),
+            "ry": str(r.radius),
+            "fill": r.fill,
+        }
+        if r.stroke and r.stroke != "transparent" and r.stroke_width:
+            attrs["stroke"] = r.stroke
+            attrs["stroke-width"] = str(r.stroke_width)
+        elements.append({"id": f"r{i}", "tag": "rect", "attrs": attrs, "text": None})
+    for i, t in enumerate(layout.texts):
+        elements.append({
+            "id": f"t{i}",
+            "tag": "text",
+            "attrs": {
+                "x": f"{t.x:.1f}",
+                "y": f"{t.y:.1f}",
+                "font-family": "Inter, sans-serif",
+                "font-size": str(t.font_size),
+                "font-weight": str(t.weight),
+                "fill": t.color,
+                "text-anchor": t.anchor,
+            },
+            "text": t.text,
+        })
+    return {
+        "viewBox": f"0 0 {layout.width} {layout.height}",
+        "width": layout.width,
+        "height": layout.height,
+        "elements": elements,
+    }

@@ -118,6 +118,79 @@ def render_png_via_playwright(
         browser.close()
 
 
+def render_live_skeleton(width: int, height: int, bg: str, job_id: str) -> str:
+    """Return a self-contained HTML page that DOM-patches its SVG via postMessage.
+
+    The parent page (app.js) forwards ``branch_partial`` and ``tree_complete``
+    SSE events to this iframe via ``postMessage``.  No direct EventSource
+    connection is opened here, which avoids the single-reader-per-queue
+    constraint on the server-side SSE stream.
+    """
+    font_css = _font_face_css()
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+{font_css}
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+html, body {{ width: 100%; height: 100%; background: {bg}; overflow: hidden; }}
+svg {{ display: block; width: 100%; height: 100%; }}
+.arbor-anim {{ opacity: 0; transition: opacity 250ms ease; }}
+.arbor-anim.shown {{ opacity: 1; }}
+</style>
+</head>
+<body>
+<svg id="live-svg"
+     xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 {width} {height}"
+     width="{width}"
+     height="{height}">
+  <rect x="0" y="0" width="{width}" height="{height}" fill="{bg}"/>
+</svg>
+<script>
+(function () {{
+  var svg = document.getElementById("live-svg");
+  var NS = "http://www.w3.org/2000/svg";
+  var known = {{}};
+
+  function applySnapshot(snap) {{
+    if (snap.viewBox) svg.setAttribute("viewBox", snap.viewBox);
+    if (snap.width)   svg.setAttribute("width",   snap.width);
+    if (snap.height)  svg.setAttribute("height",  snap.height);
+    var els = snap.elements || [];
+    els.forEach(function(el) {{
+      if (known[el.id]) return;
+      known[el.id] = true;
+      var node = document.createElementNS(NS, el.tag);
+      var attrs = el.attrs || {{}};
+      Object.keys(attrs).forEach(function(k) {{
+        node.setAttribute(k, attrs[k]);
+      }});
+      if (el.text != null) node.textContent = el.text;
+      node.classList.add("arbor-anim");
+      svg.appendChild(node);
+      requestAnimationFrame(function() {{ node.classList.add("shown"); }});
+    }});
+  }}
+
+  window.addEventListener("message", function(e) {{
+    var msg = e.data;
+    if (!msg || typeof msg !== "object") return;
+    if (msg.type === "branch_partial") {{
+      try {{ applySnapshot(msg.data); }} catch(err) {{ console.error("branch_partial patch failed", err); }}
+    }} else if (msg.type === "tree_complete") {{
+      if (msg.data && msg.data.preview_url) {{
+        window.location.replace(msg.data.preview_url);
+      }}
+    }}
+  }});
+}})();
+</script>
+</body>
+</html>"""
+
+
 def write_outputs(tree: dict, layout: Layout, out_dir: Path) -> dict[str, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     svg = render_svg(layout)

@@ -381,7 +381,8 @@ async function runJob() {
   showPreviewSkeleton();
 
   const es = new EventSource(`/status/${job_id}`);
-  Object.keys(STEP_LABELS).forEach((evt) => {
+  const ALL_EVENTS = Object.keys(STEP_LABELS).concat(["branch_partial", "tree_complete", "validation_retry"]);
+  ALL_EVENTS.forEach((evt) => {
     es.addEventListener(evt, (e) => handleEvent(evt, e, job_id, es));
   });
   es.addEventListener("error", () => {
@@ -435,10 +436,19 @@ function handleEvent(evt, e, jobId, es) {
       const previewFrame = document.getElementById("preview-frame");
       previewFrame.style.aspectRatio = `${data.width} / ${data.height}`;
     }
-    previewIframe.src = `/preview/${jobId}/output.html`;
+    const url = data.url || `/preview/${jobId}/output.html`;
+    previewIframe.src = url;
     previewIframe.addEventListener("load", () => {
       previewOverlay.classList.add("hidden");
     }, { once: true });
+  } else if (evt === "branch_partial") {
+    if (previewIframe.contentWindow) {
+      previewIframe.contentWindow.postMessage({ type: "branch_partial", data: data }, "*");
+    }
+  } else if (evt === "tree_complete") {
+    if (previewIframe.contentWindow) {
+      previewIframe.contentWindow.postMessage({ type: "tree_complete", data: data }, "*");
+    }
   } else if (evt === "screenshotting_png") {
     overlayLabel.textContent = "Snapshotting PNG...";
   }
