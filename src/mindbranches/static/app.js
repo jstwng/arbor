@@ -164,12 +164,32 @@ const defaultWidthInput = document.getElementById("default-width");
 
 const themeHost = document.getElementById("theme-host");
 const modelHost = document.getElementById("model-host");
+const layersHost = document.getElementById("layers-host");
+const layersHint = document.getElementById("layers-hint");
 
 let pendingFile = null;
 let configCache = null;
 let draftConfig = null;
 let themeDropdown = null;
 let modelDropdown = null;
+let layersDropdown = null;
+let lastTypedPathSize = null;  // bytes of the typed file, for auto-hint
+
+// Mirror of depth.suggest_layers in Python -- keep both in sync.
+function suggestLayers(byteCount) {
+  if (byteCount < 1500) return 2;
+  if (byteCount < 8000) return 3;
+  if (byteCount < 50000) return 4;
+  return 5;
+}
+
+const LAYER_OPTIONS = [
+  { value: "auto", label: "Auto" },
+  { value: "2",    label: "2 layers" },
+  { value: "3",    label: "3 layers" },
+  { value: "4",    label: "4 layers" },
+  { value: "5",    label: "5 layers" },
+];
 
 // ---------- Bootstrap ----------
 
@@ -221,8 +241,22 @@ function populateMainDropdowns(config) {
     modelDropdown.setOptions(models);
   }
 
+  if (!layersDropdown) {
+    layersDropdown = createDropdown({ options: LAYER_OPTIONS, value: "auto" });
+    layersHost.appendChild(layersDropdown);
+  }
+
   const defaultWidth = (config.defaults && config.defaults.width) || 1600;
   if (!widthInput.value) widthInput.value = defaultWidth;
+}
+
+function updateLayersHint(byteCount) {
+  if (byteCount == null) {
+    layersHint.textContent = "";
+    return;
+  }
+  const suggested = suggestLayers(byteCount);
+  layersHint.textContent = `auto: ${suggested}`;
 }
 
 // ---------- File picker / drag-drop ----------
@@ -265,12 +299,14 @@ function setPendingFile(file) {
   filepathInput.value = `[file: ${file.name}]`;
   fileHint.hidden = false;
   fileHint.textContent = `Holding "${file.name}" -- ${formatBytes(file.size)}. Will be uploaded when you click Generate.`;
+  updateLayersHint(file.size);
 }
 
 function clearPendingFile() {
   pendingFile = null;
   fileInput.value = "";
   fileHint.hidden = true;
+  updateLayersHint(lastTypedPathSize);
 }
 
 function formatBytes(n) {
@@ -305,6 +341,8 @@ async function runJob() {
 
   const theme = themeDropdown ? themeDropdown.getValue() : null;
   const model = modelDropdown ? modelDropdown.getValue() : null;
+  const layersVal = layersDropdown ? layersDropdown.getValue() : "auto";
+  const layers = (layersVal && layersVal !== "auto") ? parseInt(layersVal, 10) : null;
   const width = parseInt(widthInput.value, 10);
   const root = document.getElementById("root").value.trim() || null;
 
@@ -320,12 +358,13 @@ async function runJob() {
       if (model) fd.append("model", model);
       fd.append("width", width);
       if (root) fd.append("root", root);
+      if (layers != null) fd.append("layers", String(layers));
       resp = await fetch("/upload", { method: "POST", body: fd });
     } else {
       resp = await fetch("/convert", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filepath, theme, model, width, root }),
+        body: JSON.stringify({ filepath, theme, model, width, root, layers }),
       });
     }
   } catch (err) {
@@ -439,7 +478,9 @@ function stepDetail(evtKey, data) {
   }
   if (evtKey === "reading_file" && data.size_bytes != null) return `${data.size_bytes} bytes`;
   if (evtKey === "computing_layout" && data.theme) return `${data.theme}, ${data.width}px`;
-  if (evtKey === "extracting_tree" && data.model) return data.model;
+  if (evtKey === "extracting_tree" && data.model) {
+    return data.layers ? `${data.model} -- ${data.layers} layers` : data.model;
+  }
   return null;
 }
 

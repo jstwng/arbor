@@ -1,42 +1,93 @@
 {
-  "root": "LLM Learning Process",
+  "root": "LLM Learning & Use",
+  "layers": 3,
   "branches": [
     {
-      "label": "Pretraining",
+      "label": "Pretraining Phase",
       "children": [
-        "Fed enormous data corpora",
-        "Predicts next token statistically",
-        "Learns surface text patterns",
-        "Fluent, but lacks instruction-following"
+        {
+          "label": "Model fed vast text corpora",
+          "children": []
+        },
+        {
+          "label": "Predicts next token statistically",
+          "children": []
+        },
+        {
+          "label": "Learns surface texture of writing",
+          "children": []
+        },
+        {
+          "label": "Fluent, but lacks instruction following",
+          "children": []
+        }
       ]
     },
     {
-      "label": "Fine-tuning",
+      "label": "Fine-tuning Phase",
       "children": [
-        "Uses curated conversation examples",
-        "Employs supervised training",
-        "Mimics desired tone and format",
-        "Becomes chatbot-like"
+        {
+          "label": "Narrows model's behavior",
+          "children": []
+        },
+        {
+          "label": "Uses curated conversation examples",
+          "children": []
+        },
+        {
+          "label": "Mimics desired tone and format",
+          "children": []
+        },
+        {
+          "label": "Becomes more like a chatbot",
+          "children": []
+        }
       ]
     },
     {
-      "label": "Reinforcement Learning (RLHF)",
+      "label": "RLHF Phase",
       "children": [
-        "Humans rank model responses",
-        "Reward model predicts rankings",
-        "LLM optimizes for reward",
-        "Achieves helpful, honest, harmless",
-        "Introduces failure modes"
+        {
+          "label": "Humans rank model responses",
+          "children": []
+        },
+        {
+          "label": "Reward model predicts rankings",
+          "children": []
+        },
+        {
+          "label": "Optimizes for helpful, honest, harmless",
+          "children": []
+        },
+        {
+          "label": "Introduces failure modes to debug",
+          "children": []
+        }
       ]
     },
     {
-      "label": "Inference",
+      "label": "Inference Process",
       "children": [
-        "Model weights are frozen",
-        "Tokens sampled one-by-one",
-        "Decoding parameters control output",
-        "System prompt steers behavior",
-        "Supports tools, retrieval, agents"
+        {
+          "label": "User interacts with frozen model",
+          "children": []
+        },
+        {
+          "label": "Tokens sampled from distribution",
+          "children": []
+        },
+        {
+          "label": "Decoding parameters control creativity",
+          "children": []
+        },
+        {
+          "label": "System prompt steers behavior",
+          "children": []
+        },
+        {
+          "label": "Tool use and agents built on top",
+          "children": []
+        }
       ]
     }
   ]

@@ -24,6 +24,7 @@ from .config import (
     public_config,
     save_config,
 )
+from .depth import clamp_layers, normalize_tree, suggest_layers
 from .extract import extract_tree
 from .layout import compute_layout
 from .render import render_html, render_png_via_playwright, render_svg
@@ -56,6 +57,7 @@ class ConvertRequest(BaseModel):
     model: str | None = None
     root: str | None = None
     width: int | None = None
+    layers: int | None = None  # 2..5; None means auto-suggest from file size
 
 
 class ConfigUpdate(BaseModel):
@@ -115,14 +117,17 @@ def _run_pipeline(job: Job, req: ConvertRequest) -> None:
             return
 
         theme, model, width = _resolve_request(req)
+        layers = clamp_layers(req.layers, suggest_layers(len(prose.encode("utf-8"))))
 
-        _put_event(job, "extracting_tree", {"model": model})
+        _put_event(job, "extracting_tree", {"model": model, "layers": layers})
         tree = extract_tree(
             prose,
             root_override=req.root,
             model_id=model,
             config=APP_CONFIG,
+            layers=layers,
         )
+        tree = normalize_tree(tree)
         _put_event(job, "tree_ready", {"tree": tree})
 
         _put_event(job, "computing_layout", {"theme": theme, "width": width})
@@ -227,6 +232,7 @@ def create_app() -> FastAPI:
         model: str | None = Form(None),
         root: str | None = Form(None),
         width: int | None = Form(None),
+        layers: int | None = Form(None),
     ) -> dict[str, str]:
         job_id = uuid.uuid4().hex[:12]
         out_dir = JOBS_ROOT / job_id
@@ -246,6 +252,7 @@ def create_app() -> FastAPI:
             model=model,
             root=root,
             width=width,
+            layers=layers,
         )
         threading.Thread(
             target=_run_pipeline, args=(job, req), daemon=True

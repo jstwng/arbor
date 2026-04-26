@@ -114,6 +114,7 @@ Flags:
 | `--width N` | Canvas width in pixels (default from config) |
 | `--theme cream\|dark\|mono` | Theme id (must exist in config) |
 | `--model <id>` | Model id (must exist in config) |
+| `--layers N` | Tree depth, 2-5. Layer 1 is the root, layer N is leaves. Default: auto-suggested from input size (2 short, 3 article-length, 4 long-form, 5 book-length). |
 | `--from-tree` | Treat the input file as `tree.json`, skip the LLM call |
 
 `--theme` and `--model` choices come from your config, so adding a new model in settings makes it instantly available on the CLI.

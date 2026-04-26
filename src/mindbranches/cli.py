@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from .config import default_model_id, default_theme_id, load_config
+from .depth import MAX_LAYERS, MIN_LAYERS, clamp_layers, normalize_tree, suggest_layers, tree_depth
 from .extract import extract_tree
 from .layout import compute_layout
 from .render import write_outputs
@@ -60,6 +61,17 @@ def main() -> None:
         help=f"Model id from config (default {default_model}).",
     )
     parser.add_argument(
+        "--layers",
+        type=int,
+        default=None,
+        help=(
+            f"Tree depth, {MIN_LAYERS}..{MAX_LAYERS}. "
+            "Layer 1 is the root, layer N is leaves. "
+            "Default: auto-suggest from the input size "
+            "(2 short, 3 article-length, 4 long-form, 5 book-length)."
+        ),
+    )
+    parser.add_argument(
         "--from-tree",
         action="store_true",
         help="Skip extraction; treat input as tree.json.",
@@ -71,16 +83,29 @@ def main() -> None:
         sys.exit(1)
 
     if args.from_tree:
-        tree = json.loads(args.input.read_text())
+        tree = normalize_tree(json.loads(args.input.read_text()))
+        layers = clamp_layers(args.layers, tree.get("layers") or tree_depth(tree["branches"]))
+        tree["layers"] = layers
     else:
         prose = args.input.read_text().strip()
         if not prose:
             print("Error: input file is empty.", file=sys.stderr)
             sys.exit(1)
-        print(f"Extracting tree via {args.model}...", flush=True)
-        tree = extract_tree(
-            prose, root_override=args.root, model_id=args.model, config=config
+        layers = clamp_layers(args.layers, suggest_layers(len(prose.encode("utf-8"))))
+        suffix = " (auto)" if args.layers is None else ""
+        print(
+            f"Extracting tree via {args.model} -- {layers} layers{suffix}...",
+            flush=True,
         )
+        tree = extract_tree(
+            prose,
+            root_override=args.root,
+            model_id=args.model,
+            config=config,
+            layers=layers,
+        )
+        tree = normalize_tree(tree)
+        tree["layers"] = layers
 
     print(
         f"Computing layout (theme={args.theme}, width={args.width})...",

@@ -35,44 +35,26 @@ def _escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _multi_line_text(
-    text_line: TextLine,
-    line_height_em: float,
-    text_anchor: str = "start",
-) -> str:
-    lines = text_line.text.split("\n")
-    first_baseline = text_line.y + text_line.font_size * 0.95
-    parts = [
-        f'<text x="{text_line.x:.1f}" y="{first_baseline:.1f}" '
-        f'font-size="{text_line.font_size}" font-weight="{text_line.weight}" '
-        f'fill="{text_line.color}" font-family="Inter, sans-serif" '
-        f'text-anchor="{text_anchor}">'
-    ]
-    for i, line in enumerate(lines):
-        dy = "0" if i == 0 else f"{text_line.font_size * line_height_em:.1f}"
-        parts.append(f'<tspan x="{text_line.x:.1f}" dy="{dy}">{_escape(line)}</tspan>')
-    parts.append("</text>")
-    return "".join(parts)
+def _text_svg(t: TextLine) -> str:
+    baseline = t.y + t.font_size * 0.95
+    return (
+        f'<text x="{t.x:.1f}" y="{baseline:.1f}" '
+        f'font-size="{t.font_size}" font-weight="{t.weight}" '
+        f'fill="{t.color}" font-family="Inter, sans-serif" '
+        f'text-anchor="{t.anchor}">{_escape(t.text)}</text>'
+    )
 
 
-def _render_root_text(text_line: TextLine, rect: Rect) -> str:
-    lines = text_line.text.split("\n")
-    line_height_em = 1.2
-    n = len(lines)
-    total_h = n * text_line.font_size * line_height_em
-    start_y = rect.y + (rect.h - total_h) / 2 + text_line.font_size * 0.85
-    cx = rect.x + rect.w / 2
-    parts = [
-        f'<text x="{cx:.1f}" y="{start_y:.1f}" '
-        f'font-size="{text_line.font_size}" font-weight="{text_line.weight}" '
-        f'fill="{text_line.color}" font-family="Inter, sans-serif" '
-        f'text-anchor="middle">'
-    ]
-    for i, line in enumerate(lines):
-        dy = "0" if i == 0 else f"{text_line.font_size * line_height_em:.1f}"
-        parts.append(f'<tspan x="{cx:.1f}" dy="{dy}">{_escape(line)}</tspan>')
-    parts.append("</text>")
-    return "".join(parts)
+def _rect_svg(r: Rect) -> str:
+    stroke_attr = (
+        f' stroke="{r.stroke}" stroke-width="{r.stroke_width}"'
+        if r.stroke != "transparent" and r.stroke_width > 0
+        else ""
+    )
+    return (
+        f'<rect x="{r.x:.1f}" y="{r.y:.1f}" width="{r.w:.1f}" height="{r.h:.1f}" '
+        f'rx="{r.radius}" ry="{r.radius}" fill="{r.fill}"{stroke_attr}/>'
+    )
 
 
 def render_svg(layout: Layout) -> str:
@@ -88,28 +70,20 @@ def render_svg(layout: Layout) -> str:
         f'fill="{layout.bg}"/>'
     )
 
-    for b in layout.branches:
+    # Bezier paths first (under everything else)
+    for p in layout.paths:
         parts.append(
-            f'<path d="{b.bezier}" stroke="{b.accent}" stroke-width="2" '
+            f'<path d="{p.d}" stroke="{p.stroke}" stroke-width="{p.width}" '
             f'fill="none" stroke-linecap="round"/>'
         )
 
-    r = layout.root_rect
-    parts.append(
-        f'<rect x="{r.x:.1f}" y="{r.y:.1f}" width="{r.w:.1f}" height="{r.h:.1f}" '
-        f'rx="{r.radius}" ry="{r.radius}" fill="{r.fill}"/>'
-    )
-    parts.append(_render_root_text(layout.root_label, r))
+    # Then rects (root + pills)
+    for r in layout.rects:
+        parts.append(_rect_svg(r))
 
-    for b in layout.branches:
-        p = b.pill
-        parts.append(
-            f'<rect x="{p.x:.1f}" y="{p.y:.1f}" width="{p.w:.1f}" height="{p.h:.1f}" '
-            f'rx="{p.radius}" ry="{p.radius}" fill="{p.fill}"/>'
-        )
-        parts.append(_multi_line_text(b.label, line_height_em=1.2))
-        for bullet in b.bullets:
-            parts.append(_multi_line_text(bullet, line_height_em=1.55))
+    # Then text on top
+    for t in layout.texts:
+        parts.append(_text_svg(t))
 
     parts.append("</svg>")
     return "\n".join(parts)

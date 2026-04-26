@@ -12,22 +12,83 @@ from typing import Any
 
 from .config import get_model, provider_api_key
 
-SYSTEM_PROMPT = """You convert prose into a horizontal mind-map structure for the MindBranches visual format.
+SYSTEM_PROMPT_TEMPLATE = """You convert prose into a hierarchical mind-map structure for the MindBranches visual format.
 
-Read the input. Identify:
-1. A short root concept (1-6 words) that captures the central idea.
-2. A handful of branches (categories / facets / sub-themes) that fan from the root. The right number depends on the source -- use as many as the prose actually warrants. Do not pad. Do not over-prune.
-3. Under each branch, 2-6 short sub-bullets (3-10 words each) -- concrete points, not paraphrased prose.
+You will produce a tree of EXACTLY {layers} layers. Layer 1 is the root concept. The deepest layer (layer {layers}) is short leaf text. The intermediate layers are category labels.
+
+Layer guide for this run (layers = {layers}):
+{layer_guide}
 
 Rules:
-- Branches must be parallel in nature (same level of abstraction).
-- Avoid redundancy across branches.
-- Sub-bullets must be short, punchy, factual or concrete. No filler.
-- Order branches in a way that reads logically (chronological, hierarchical, or by importance).
-- If a root override is provided in the user message, use it verbatim and choose branches that fit it.
+- The root (layer 1) is 1-6 words.
+- Intermediate-layer labels are 1-4 words and read as parallel categories at their level.
+- Leaf entries (deepest layer) are 3-10 words each, concrete and punchy.
+- Every non-leaf node must have at least 2 children.
+- Order siblings logically (chronological, hierarchical, or by importance).
+- If a root override is provided in the user message, use it verbatim.
+
+Schema: every node is `{{"label": "...", "children": [...]}}`. Leaves have no children (or an empty array). The tree must be exactly {layers} layers deep along every path -- no shallower, no deeper.
 
 Return only valid JSON matching the response schema. Do not include any commentary.
 """
+
+LAYER_GUIDES: dict[int, str] = {
+    2: "- Layer 1: root\n- Layer 2: leaf entries (short descriptive lines)",
+    3: "- Layer 1: root\n- Layer 2: section labels\n- Layer 3: leaf entries under each section",
+    4: "- Layer 1: root\n- Layer 2: part labels\n- Layer 3: section labels under each part\n- Layer 4: leaf entries under each section",
+    5: "- Layer 1: root\n- Layer 2: book/volume labels\n- Layer 3: part labels\n- Layer 4: section labels\n- Layer 5: leaf entries",
+}
+
+# Recursive JSON schema for a tree node. We encode the depth limit through
+# the prompt text since most providers' structured-output validators do not
+# support recursive `$ref`. The schema stays loose; the prompt enforces depth.
+NODE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["label"],
+    "properties": {
+        "label": {"type": "string"},
+        "children": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["label"],
+                "properties": {
+                    "label": {"type": "string"},
+                    "children": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["label"],
+                            "properties": {
+                                "label": {"type": "string"},
+                                "children": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "required": ["label"],
+                                        "properties": {
+                                            "label": {"type": "string"},
+                                            "children": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "required": ["label"],
+                                                    "properties": {
+                                                        "label": {"type": "string"},
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+}
 
 GEMINI_RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -37,17 +98,7 @@ GEMINI_RESPONSE_SCHEMA: dict[str, Any] = {
         "branches": {
             "type": "array",
             "minItems": 2,
-            "items": {
-                "type": "object",
-                "required": ["label", "children"],
-                "properties": {
-                    "label": {"type": "string"},
-                    "children": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                    },
-                },
-            },
+            "items": NODE_SCHEMA,
         },
     },
 }
@@ -61,11 +112,20 @@ def _build_user_prompt(prose: str, root_override: str | None) -> str:
     return "".join(parts)
 
 
+def _system_prompt_for(layers: int) -> str:
+    layers = max(2, min(5, layers))
+    return SYSTEM_PROMPT_TEMPLATE.format(
+        layers=layers,
+        layer_guide=LAYER_GUIDES[layers],
+    )
+
+
 def _extract_gemini(
     prose: str,
     root_override: str | None,
     model_id: str,
     api_key: str,
+    layers: int,
 ) -> dict[str, Any]:
     if not api_key:
         raise RuntimeError(
@@ -82,7 +142,7 @@ def _extract_gemini(
         model=model_id,
         contents=_build_user_prompt(prose, root_override),
         config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
+            system_instruction=_system_prompt_for(layers),
             response_mime_type="application/json",
             response_schema=GEMINI_RESPONSE_SCHEMA,
             temperature=0.3,
@@ -104,6 +164,7 @@ def extract_tree(
     root_override: str | None,
     model_id: str,
     config: dict[str, Any],
+    layers: int = 3,
 ) -> dict[str, Any]:
     """Provider-aware tree extraction.
 
@@ -112,13 +173,14 @@ def extract_tree(
         root_override: if given, used verbatim as the root; the model only fills branches.
         model_id: an id present in config["models"] (e.g. "gemini-2.5-flash").
         config: full loaded config dict.
+        layers: total tree depth, 2 to 5. Layer 1 is the root, layer N is leaves.
     """
     model = get_model(config, model_id)
     provider = model["provider"]
     api_key = provider_api_key(config, provider)
 
     if provider == "gemini":
-        tree = _extract_gemini(prose, root_override, model_id, api_key)
+        tree = _extract_gemini(prose, root_override, model_id, api_key, layers)
     else:
         raise RuntimeError(
             f"Provider {provider!r} not implemented yet. "
@@ -127,4 +189,5 @@ def extract_tree(
 
     if root_override:
         tree["root"] = root_override
+    tree["layers"] = layers
     return tree
