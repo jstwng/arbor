@@ -1,7 +1,7 @@
 [project]
-name = "mindbranches"
+name = "arbor"
 version = "0.1.0"
-description = "Generate MindBranches-style horizontal mind-map diagrams from prose."
+description = "Generate Arbor-style horizontal mind-map diagrams from prose."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
@@ -31,13 +31,13 @@ dependencies = [
 ]
 
 [project.scripts]
-mindbranches = "mindbranches.cli:main"
-mindbranches-portal = "mindbranches.server:main"
+arbor = "arbor.cli:main"
+arbor-portal = "arbor.server:main"
 
 [project.urls]
-Homepage = "https://github.com/jstwng/mindbranches"
-Repository = "https://github.com/jstwng/mindbranches"
-Issues = "https://github.com/jstwng/mindbranches/issues"
+Homepage = "https://github.com/jstwng/arbor"
+Repository = "https://github.com/jstwng/arbor"
+Issues = "https://github.com/jstwng/arbor/issues"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -47,4 +47,4 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-mindbranches = ["fonts/*.ttf", "templates/*.j2", "static/*"]
+arbor = ["fonts/*.ttf", "templates/*.j2", "static/*"]

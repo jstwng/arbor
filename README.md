@@ -1,6 +1,6 @@
-# mindbranches
+# arbor
 
-Turn a `.txt` file of prose into a horizontal mind-map diagram. SVG, HTML, and PNG, in one shot. Style is inspired by [@MindBranches on X](https://x.com/MindBranches) — clean, ink-on-paper, branches fanning right from a single root.
+Turn a `.txt` file of prose into a horizontal mind-map diagram. SVG, HTML, and PNG, in one shot. Clean, ink-on-paper aesthetic — branches fanning right from a single root, leaf ideas resting at the deepest layer.
 
 ![sample output](examples/sample-output.png)
 
@@ -23,8 +23,8 @@ You can use it as a CLI, or run a small local web portal that handles file uploa
 Requires Python 3.11+. Pick a folder, then:
 
 ```bash
-git clone https://github.com/jstwng/mindbranches.git
-cd mindbranches
+git clone https://github.com/jstwng/arbor.git
+cd arbor
 
 python3.11 -m venv .venv
 source .venv/bin/activate
@@ -33,7 +33,7 @@ pip install -e .
 playwright install chromium       # one-time, used only for PNG screenshots
 ```
 
-That's it. The first time you run the tool, a config file is created at `~/.config/mindbranches/config.json`.
+That's it. The first time you run the tool, a config file is created at `~/.config/arbor/config.json`.
 
 ---
 
@@ -44,11 +44,11 @@ There are two ways to add an API key.
 **Easy (recommended): the portal.**
 
 ```bash
-mindbranches-portal
+arbor-portal
 # opens http://127.0.0.1:8765
 ```
 
-If no key is configured, the Settings modal opens automatically. Paste your key in the matching provider row and hit Save. It is written to `~/.config/mindbranches/config.json` (mode 0600) and never leaves your machine.
+If no key is configured, the Settings modal opens automatically. Paste your key in the matching provider row and hit Save. It is written to `~/.config/arbor/config.json` (mode 0600) and never leaves your machine.
 
 **Direct: edit the config file.**
 
@@ -72,7 +72,7 @@ If no key is configured, the Settings modal opens automatically. Paste your key 
 
 Add or remove models freely — the dropdown in the portal and the `--model` CLI choices follow the config. Ship a fork with whatever defaults make sense for you.
 
-If a `.env` file in your working tree (or any parent directory) holds `GEMINI_API_KEY=...`, it is auto-migrated into the config the first time `mindbranches` runs.
+If a `.env` file in your working tree (or any parent directory) holds `GEMINI_API_KEY=...`, it is auto-migrated into the config the first time `arbor` runs.
 
 ---
 
@@ -81,8 +81,8 @@ If a `.env` file in your working tree (or any parent directory) holds `GEMINI_AP
 ### Web portal
 
 ```bash
-mindbranches-portal              # http://127.0.0.1:8765
-mindbranches-portal --port 9000  # custom port
+arbor-portal              # http://127.0.0.1:8765
+arbor-portal --port 9000  # custom port
 ```
 
 What you do:
@@ -93,16 +93,16 @@ What you do:
 4. Watch the diagram build in the preview pane while the status trail ticks through each step.
 5. Download `tree.json`, `output.svg`, `output.html`, or `output.png`. The "open in new tab" link gives you the inline browser view.
 
-Each run writes its artifacts to `~/.cache/mindbranches/<job_id>/`.
+Each run writes its artifacts to `~/.cache/arbor/<job_id>/`.
 
 ### CLI
 
 ```bash
-mindbranches notes.txt
-mindbranches notes.txt --theme dark --root "The shape of attention"
-mindbranches notes.txt --model gemini-2.5-pro --width 2000 --out ./out
+arbor notes.txt
+arbor notes.txt --theme dark --root "The shape of attention"
+arbor notes.txt --model gemini-2.5-pro --width 2000 --out ./out
 
-mindbranches tree.json --from-tree     # render a hand-edited tree, no API call
+arbor tree.json --from-tree     # render a hand-edited tree, no API call
 ```
 
 Flags:
@@ -136,7 +136,7 @@ Open Settings -> **Add model** -> fill in id, label, provider -> Save. Or edit t
 
 ## Adding a new provider
 
-Today only `gemini` is wired in `src/mindbranches/extract.py`. Adding another provider means writing one function:
+Today only `gemini` is wired in `src/arbor/extract.py`. Adding another provider means writing one function:
 
 ```python
 def _extract_<provider>(prose, root_override, model_id, api_key) -> dict:
@@ -150,10 +150,10 @@ Then add a branch to `extract_tree`. PRs welcome.
 ## Project layout
 
 ```
-src/mindbranches/
-  cli.py             # mindbranches CLI
-  server.py          # mindbranches-portal (FastAPI + SSE)
-  config.py          # ~/.config/mindbranches/config.json + .env migration
+src/arbor/
+  cli.py             # arbor CLI
+  server.py          # arbor-portal (FastAPI + SSE)
+  config.py          # ~/.config/arbor/config.json + .env migration
   extract.py         # provider-aware tree extraction
   layout.py          # geometry: rects, bezier curves, vertical packing
   render.py          # SVG / HTML / PNG (Playwright at 2x DPI)
@@ -164,7 +164,7 @@ examples/
   sample-prose.txt
   sample-output.{svg,png,json}
 docs/superpowers/specs/
-  2026-04-22-mindbranches-design.md
+  2026-04-22-arbor-design.md
 ```
 
 ---
